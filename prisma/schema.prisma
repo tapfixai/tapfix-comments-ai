@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id               String    @id @default(cuid())
+  googleEmail      String    @unique @map("google_email")
+  youtubeChannelId String    @map("youtube_channel_id")
+  accessToken      String    @map("access_token")
+  refreshToken     String    @map("refresh_token")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  settings         Settings?
+  comments         Comment[]
+  dryRunBatches    DryRunBatch[]
+
+  @@map("users")
+}
+
+model Settings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique @map("user_id")
+  autoReplyEnabled   Boolean  @default(true) @map("auto_reply_enabled")
+  autoDeleteEnabled  Boolean  @default(true) @map("auto_delete_enabled")
+  autoLikeEnabled    Boolean  @default(false) @map("auto_like_enabled")
+  dailyLimit         Int      @default(50) @map("daily_limit")
+  languageMode       String   @default("same_as_commenter") @map("language_mode")
+  fallbackLanguage   String   @default("English") @map("fallback_language")
+  replyLanguage      String   @default("English") @map("reply_language")
+  prompt             String
+  maxReplyLength     Int      @default(120) @map("max_reply_length")
+  emojiEnabled       Boolean  @default(true) @map("emoji_enabled")
+  maxEmoji           Int      @default(3) @map("max_emoji")
+  reviewMode         String   @default("full_auto") @map("review_mode")
+  createdAt          DateTime @default(now()) @map("created_at")
+  user               User     @relation(fields: [userId], references: [id])
+
+  @@map("settings")
+}
+
+model Comment {
+  id               String    @id @default(cuid())
+  userId           String?   @map("user_id")
+  youtubeCommentId String    @unique @map("youtube_comment_id")
+  videoId          String    @map("video_id")
+  authorName       String    @map("author_name")
+  commentText      String    @map("comment_text")
+  detectedLanguage String?   @map("detected_language")
+  replyLanguage    String?   @map("reply_language")
+  languageConfidence Float?  @map("language_confidence")
+  safetyCategory   String?   @map("safety_category")
+  actionTaken      String?   @map("action_taken")
+  deleteStatus     String?   @map("delete_status")
+  likeStatus       String?   @map("like_status")
+  replyStatus      String?   @map("reply_status")
+  aiReply          String?   @map("ai_reply")
+  skipReason       String?   @map("skip_reason")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  processedAt      DateTime? @map("processed_at")
+  user             User?     @relation(fields: [userId], references: [id])
+
+  @@map("comments")
+}
+
+model DryRunBatch {
+  id        String         @id @default(cuid())
+  userId    String?        @map("user_id")
+  total     Int
+  replies   Int
+  reviews   Int
+  deletes   Int
+  createdAt DateTime       @default(now()) @map("created_at")
+  user      User?          @relation(fields: [userId], references: [id])
+  results   DryRunResult[]
+
+  @@map("dry_run_batches")
+}
+
+model DryRunResult {
+  id                 String      @id @default(cuid())
+  batchId            String      @map("batch_id")
+  externalCommentId  String?     @map("external_comment_id")
+  authorName         String?     @map("author_name")
+  commentText        String      @map("comment_text")
+  action             String
+  safetyCategory     String?     @map("safety_category")
+  detectedLanguage   String?     @map("detected_language")
+  replyLanguage      String?     @map("reply_language")
+  languageConfidence Float?      @map("language_confidence")
+  aiReply            String?     @map("ai_reply")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  batch              DryRunBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@map("dry_run_results")
+}
+
+model Log {
+  id        String   @id @default(cuid())
+  action    String
+  message   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("logs")
+}
