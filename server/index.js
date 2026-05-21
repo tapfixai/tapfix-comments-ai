@@ -75,6 +75,15 @@ const youtubeReplySchema = z.object({
   reply: z.string().min(1).max(120),
 });
 
+const regenerateReplySchema = z.object({
+  comment: z.string().min(1),
+  detectedLanguage: z.string().optional(),
+  category: z.string().optional(),
+  tone: z.string().optional(),
+  voiceProfile: z.string().optional(),
+  usedReplies: z.array(z.string()).optional(),
+});
+
 server.get("/health", async () => ({
   status: "ok",
   youtube: process.env.GOOGLE_CLIENT_ID ? "configured" : "missing_oauth_config",
@@ -219,6 +228,63 @@ server.get("/api/comments/batch-runs/latest", async (request, reply) => {
     return reply.code(404).send({ error: "no_batch_runs" });
   }
   return latest;
+});
+
+server.get("/api/insights", async () => {
+  const latestRun = await latestBatchRunFromDb();
+  const results = latestRun?.results || batchRuns.at(-1)?.results || [];
+  return buildCommentInsights(results, latestRun);
+});
+
+server.post("/api/comments/regenerate-reply", async (request, reply) => {
+  const parsed = regenerateReplySchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: "invalid_regenerate_request", details: parsed.error.flatten() });
+  }
+
+  const comment = {
+    id: `regen_${crypto.randomUUID()}`,
+    videoId: "manual-test",
+    text: parsed.data.comment,
+    authorName: "Viewer",
+  };
+  const analysis = {
+    action: "reply",
+    category: parsed.data.category || "safe",
+    detectedLanguage: parsed.data.detectedLanguage || settings.fallbackLanguage,
+    replyLanguage: parsed.data.detectedLanguage || settings.fallbackLanguage,
+    languageConfidence: 0.9,
+    reply: "Thanks for watching, happy you liked it.",
+  };
+
+  try {
+    const rawReply = process.env.OPENAI_API_KEY
+      ? await generateOpenAIReply(comment, analysis, {
+        tone: parsed.data.tone,
+        voiceProfile: parsed.data.voiceProfile,
+        regenerate: true,
+      })
+      : makeReplyUnique(analysis.reply, new Set(parsed.data.usedReplies || []), analysis.detectedLanguage);
+    const cleanedReply = cleanAiReply(rawReply);
+
+    if (cleanedReply === "DELETE") {
+      return { reply: "DELETE", action: "delete", source: process.env.OPENAI_API_KEY ? "openai" : "rules" };
+    }
+
+    const replySafety = validateReply(cleanedReply, settings.maxReplyLength);
+    if (!replySafety.safe) {
+      return reply.code(422).send({ error: "unsafe_reply", reason: replySafety.reason });
+    }
+
+    return {
+      reply: makeReplyUnique(cleanedReply, new Set(parsed.data.usedReplies || []), analysis.detectedLanguage),
+      action: "reply",
+      source: process.env.OPENAI_API_KEY ? "openai" : "rules",
+    };
+  } catch (error) {
+    addLog("regenerate_error", error.message || "Reply regeneration failed");
+    return reply.code(502).send({ error: "regenerate_failed", message: error.message || "Reply regeneration failed" });
+  }
 });
 
 server.post("/api/comments/analyze", async (request, reply) => {
@@ -512,6 +578,7 @@ async function createDryRun(comments, meta = {}) {
 
   for (const comment of comments) {
     const analysis = await analyzeCommentWithAi(comment);
+    const smartCategory = getSmartCategory(comment.text, analysis);
     const reply = analysis.action === "reply"
       ? makeReplyUnique(analysis.reply, usedReplies, analysis.detectedLanguage)
       : analysis.reply;
@@ -530,6 +597,8 @@ async function createDryRun(comments, meta = {}) {
       replyLanguage: analysis.replyLanguage,
       languageConfidence: analysis.languageConfidence,
       reply,
+      smartCategory,
+      decisionReason: getDecisionReason(comment.text, analysis, smartCategory),
       replySource: analysis.replySource,
     });
   }
@@ -614,7 +683,7 @@ async function analyzeCommentWithAi(comment) {
   }
 }
 
-async function generateOpenAIReply(comment, analysis) {
+async function generateOpenAIReply(comment, analysis, options = {}) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -629,11 +698,14 @@ async function generateOpenAIReply(comment, analysis) {
         "Do not sound like a bot. Do not include links. Do not sell anything.",
         "Do not copy the viewer comment. Do not reply with only emoji.",
         "For emoji-only positive comments, write a short thank-you sentence instead of echoing emoji.",
+        options.tone ? `Tone preset: ${options.tone}.` : "",
+        options.voiceProfile ? `Creator voice profile: ${options.voiceProfile}` : "",
+        options.regenerate ? "Generate a fresh alternative. Avoid generic repeated thank-you wording." : "",
         `Keep it under ${settings.maxReplyLength} characters.`,
         `Use 0-${settings.maxEmoji} emoji maximum.`,
         "If the comment is negative, sexual, spammy, aggressive, political, duplicated, contains links, unclear, or unsafe, return exactly DELETE.",
         "Return only the reply text or DELETE. No quotes, no explanation.",
-      ].join("\n"),
+      ].filter(Boolean).join("\n"),
       input: [
         {
           role: "user",
@@ -770,6 +842,144 @@ function uniqueReplyAlternatives(language) {
     "So glad you liked the vibe.",
     "Thank you for the sweet comment.",
   ];
+}
+
+function getSmartCategory(commentText, analysis) {
+  const text = normalizeForComparison(commentText);
+  const category = normalizeForComparison(analysis.category);
+
+  if (analysis.action === "delete") {
+    if (category.includes("sexual")) return "sexual";
+    if (category.includes("link") || category.includes("scam")) return "link";
+    if (category.includes("spam")) return "spam";
+    if (category.includes("hate") || category.includes("aggressive") || category.includes("toxic")) return "toxic";
+    if (category.includes("meaningless")) return "emoji_reaction";
+    if (category.includes("unclear")) return "unclear";
+    return category || "unsafe";
+  }
+
+  if (/\?/.test(commentText) || /\b(what|why|how|where|when|who|can you|could you|do you)\b/i.test(commentText)) {
+    return "question";
+  }
+
+  if (/\b(more|please|can you|could you|make|do another|request)\b/i.test(commentText)) {
+    return "request";
+  }
+
+  if (/\b(boring|bad|hate|don't like|dislike|too loud|too slow)\b/i.test(text)) {
+    return "criticism";
+  }
+
+  if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u.test(commentText.trim())) {
+    return "emoji_reaction";
+  }
+
+  if (/\b(thanks|thank you|love|beautiful|amazing|perfect|nice|good|relax|relaxing|sleep|great|best)\b/i.test(commentText)) {
+    return "praise";
+  }
+
+  return "conversation";
+}
+
+function getDecisionReason(commentText, analysis, smartCategory) {
+  if (analysis.action === "delete") {
+    return `Safety filter marked this as ${analysis.category || smartCategory}.`;
+  }
+
+  if (analysis.action === "review") {
+    return `Needs manual review because the category is ${analysis.category || "unclear"}.`;
+  }
+
+  if (smartCategory === "question") {
+    return "Safe question. AI can answer warmly without links or sales.";
+  }
+
+  if (smartCategory === "request") {
+    return "Safe request or suggestion. Good candidate for a friendly reply.";
+  }
+
+  if (smartCategory === "emoji_reaction") {
+    return "Positive reaction. Reply with a short thank-you instead of copying emoji.";
+  }
+
+  return `Safe ${smartCategory}. Reply stays short, natural, and in the viewer language.`;
+}
+
+function buildCommentInsights(results, latestRun) {
+  const actionCounts = countBy(results, (item) => item.status === "pending" ? item.action : item.status);
+  const categoryCounts = countBy(results, (item) => item.smartCategory || item.category || "unknown");
+  const videoCounts = countBy(
+    results.filter((item) => ["delete", "review"].includes(item.action)),
+    (item) => item.videoId || "unknown-video",
+  );
+  const questions = results
+    .filter((item) => (item.smartCategory || "").includes("question") || /\?/.test(item.comment || ""))
+    .slice(0, 5);
+  const requests = results
+    .filter((item) => (item.smartCategory || "").includes("request"))
+    .slice(0, 5);
+  const totalEstimatedUnits = estimateYouTubeQuotaUnits(results);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    latestRunId: latestRun?.id || null,
+    totals: {
+      total: results.length,
+      comments: results.length,
+      pending: results.filter((item) => (item.status || "pending") === "pending").length,
+      replies: results.filter((item) => item.action === "reply").length,
+      deletes: results.filter((item) => item.action === "delete").length,
+      reviews: results.filter((item) => item.action === "review").length,
+    },
+    topCategories: toSortedCounts(categoryCounts),
+    actionCounts: toSortedCounts(actionCounts),
+    videoHotspots: toSortedCounts(videoCounts).slice(0, 5),
+    contentIdeas: [...questions, ...requests].slice(0, 6).map((item) => ({
+      comment: item.comment,
+      videoId: item.videoId,
+      idea: getContentIdea(item),
+      count: 1,
+    })),
+    quotaGuard: {
+      estimatedUnits: totalEstimatedUnits,
+      nextRunAdvice: totalEstimatedUnits > 8000
+        ? "High usage. Use smaller batches until quota is increased."
+        : "Safe for manual review batches.",
+      recommendation: totalEstimatedUnits > 8000
+        ? "Small manual batches until quota is increased"
+        : "Manual review batches are safe",
+      safeDailyRuns: Math.max(1, Math.floor(10000 / Math.max(totalEstimatedUnits, 1))),
+      dailyLimit: 10000,
+    },
+  };
+}
+
+function countBy(items, getKey) {
+  return items.reduce((counts, item) => {
+    const key = getKey(item) || "unknown";
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function toSortedCounts(counts) {
+  return Object.entries(counts)
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function estimateYouTubeQuotaUnits(results) {
+  const readUnits = Math.max(1, Math.ceil(results.length / 100));
+  const writeUnits = results.filter((item) => ["published", "deleted"].includes(item.status)).length * 50;
+  return readUnits + writeUnits;
+}
+
+function getContentIdea(item) {
+  const comment = normalizeForComparison(item.comment);
+  if (comment.includes("clean")) return "Consider a cleaning-focused ASMR video.";
+  if (comment.includes("sleep")) return "Sleep-focused long-form video may work well.";
+  if (comment.includes("sound") || comment.includes("trigger")) return "Repeat or vary this trigger in a future upload.";
+  return "Use this viewer comment as a content angle for the next video.";
 }
 
 function getPublicApiUrl(request) {

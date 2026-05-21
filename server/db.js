@@ -68,7 +68,10 @@ async function ensureDatabase() {
         ON dry_run_results(batch_id);
 
       ALTER TABLE dry_run_results
-        ADD COLUMN IF NOT EXISTS video_id TEXT;
+        ADD COLUMN IF NOT EXISTS video_id TEXT,
+        ADD COLUMN IF NOT EXISTS smart_category TEXT,
+        ADD COLUMN IF NOT EXISTS decision_reason TEXT,
+        ADD COLUMN IF NOT EXISTS reply_source TEXT;
 
       CREATE TABLE IF NOT EXISTS processed_comments (
         comment_id TEXT PRIMARY KEY,
@@ -141,9 +144,12 @@ export async function persistBatchRun(run) {
             detected_language,
             reply_language,
             language_confidence,
-            ai_reply
+            ai_reply,
+            smart_category,
+            decision_reason,
+            reply_source
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         `,
         [
           crypto.randomUUID(),
@@ -158,6 +164,9 @@ export async function persistBatchRun(run) {
           result.replyLanguage,
           result.languageConfidence,
           result.reply,
+          result.smartCategory,
+          result.decisionReason,
+          result.replySource,
         ],
       );
     }
@@ -252,6 +261,9 @@ export async function latestBatchRunFromDb() {
           dry_run_results.reply_language AS "replyLanguage",
           dry_run_results.language_confidence AS "languageConfidence",
           dry_run_results.ai_reply AS "aiReply",
+          dry_run_results.smart_category AS "smartCategory",
+          dry_run_results.decision_reason AS "decisionReason",
+          dry_run_results.reply_source AS "replySource",
           pc.action AS "processedAction",
           pc.status AS "processedStatus",
           pc.reply_text AS "processedReplyText",
@@ -291,6 +303,9 @@ export async function latestBatchRunFromDb() {
         replyLanguage: result.replyLanguage,
         languageConfidence: result.languageConfidence,
         reply: result.processedReplyText || result.aiReply,
+        smartCategory: result.smartCategory,
+        decisionReason: result.decisionReason,
+        replySource: result.replySource,
       })),
     };
   } catch (error) {

@@ -91,6 +91,9 @@ model DryRunResult {
   replyLanguage      String?     @map("reply_language")
   languageConfidence Float?      @map("language_confidence")
   aiReply            String?     @map("ai_reply")
+  smartCategory      String?     @map("smart_category")
+  decisionReason     String?     @map("decision_reason")
+  replySource        String?     @map("reply_source")
   createdAt          DateTime    @default(now()) @map("created_at")
   batch              DryRunBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 

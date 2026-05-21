@@ -3,19 +3,23 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
+  BarChart3,
   Bot,
   CheckCircle2,
+  CheckSquare,
   Clock3,
   Database,
   FileText,
   Gauge,
   Heart,
+  Lightbulb,
   MessageSquareText,
   RefreshCw,
   Save,
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
   Trash2,
   Video,
 } from "lucide-react";
@@ -27,10 +31,11 @@ const MAX_STATUS_MESSAGE_LENGTH = 120;
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Gauge },
-  { id: "comments", label: "Comments", icon: MessageSquareText },
+  { id: "comments", label: "Review Queue", icon: MessageSquareText },
   { id: "batch", label: "Batch Test", icon: Database },
   { id: "ai", label: "AI Settings", icon: Bot },
   { id: "safety", label: "Safety", icon: ShieldCheck },
+  { id: "insights", label: "Insights", icon: BarChart3 },
   { id: "logs", label: "Logs", icon: FileText },
 ];
 
@@ -152,6 +157,7 @@ function App() {
     batch: <BatchTest />,
     ai: <AISettings prompt={prompt} setPrompt={setPrompt} emoji={emoji} setEmoji={setEmoji} />,
     safety: <SafetySettings />,
+    insights: <Insights />,
     logs: <Logs logs={liveLogs} loading={logsLoading} error={logsError} onRefresh={refreshLogs} />,
   };
 
@@ -260,8 +266,14 @@ function Comments() {
   const [items, setItems] = useState([]);
   const [latestRun, setLatestRun] = useState(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [activeQueue, setActiveQueue] = useState("needs_reply");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [editedReplies, setEditedReplies] = useState({});
+  const [rowStatuses, setRowStatuses] = useState({});
+  const [tone, setTone] = useState("Warm");
+  const [voiceProfile, setVoiceProfile] = useState("Warm, calm ASMR creator. Short replies, no sales.");
   const [isLoading, setIsLoading] = useState(false);
+  const [isBulkRunning, setIsBulkRunning] = useState(false);
   const [error, setError] = useState("");
 
   async function loadLatestComments() {
@@ -275,6 +287,7 @@ function Comments() {
       }
       setLatestRun(payload);
       setItems(payload.results || []);
+      setSelectedIds([]);
     } catch (loadError) {
       setError(loadError.message || "Failed to load comments");
       setItems([]);
@@ -283,94 +296,379 @@ function Comments() {
     }
   }
 
+  async function runManualAction(item, action) {
+    setError("");
+    setRowStatuses((current) => ({
+      ...current,
+      [item.id]: {
+        status: "working",
+        message: action === "reply" ? "Publishing..." : action === "delete" ? "Deleting..." : "Skipping...",
+      },
+    }));
+
+    try {
+      const response = await fetch(`${API_URL}/api/youtube/comments/${encodeURIComponent(item.id)}/${action}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: action === "reply"
+          ? JSON.stringify({ reply: editedReplies[item.id] ?? item.reply })
+          : JSON.stringify({ videoId: item.videoId }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(formatApiError(payload.message || payload.error || `${action} failed`));
+      }
+
+      const nextStatus = payload.status || (action === "reply" ? "published" : action === "delete" ? "deleted" : "skipped");
+      setRowStatuses((current) => ({
+        ...current,
+        [item.id]: {
+          status: nextStatus,
+          message: action === "reply" ? "Published" : action === "delete" ? "Deleted" : "Skipped",
+          url: payload.replyUrl || item.commentUrl || item.videoUrl,
+          studioUrl: payload.studioCommentsUrl || item.studioCommentsUrl,
+        },
+      }));
+      setItems((current) => current.map((candidate) => (
+        candidate.id === item.id
+          ? { ...candidate, status: nextStatus, processedAction: action, reply: editedReplies[item.id] ?? candidate.reply }
+          : candidate
+      )));
+      setSelectedIds((current) => current.filter((id) => id !== item.id));
+    } catch (manualError) {
+      const message = formatApiError(manualError.message || `${action} failed`);
+      setRowStatuses((current) => ({
+        ...current,
+        [item.id]: { status: "failed", message },
+      }));
+      setError(message);
+    }
+  }
+
+  async function regenerateReply(item) {
+    setError("");
+    setRowStatuses((current) => ({
+      ...current,
+      [item.id]: { status: "working", message: "Regenerating..." },
+    }));
+
+    try {
+      const usedReplies = items
+        .map((candidate) => editedReplies[candidate.id] ?? candidate.reply)
+        .filter(Boolean);
+      const response = await fetch(`${API_URL}/api/comments/regenerate-reply`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          comment: item.comment,
+          detectedLanguage: item.detectedLanguage,
+          category: item.category,
+          tone,
+          voiceProfile,
+          usedReplies,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || "Regenerate failed");
+      }
+
+      setEditedReplies((current) => ({ ...current, [item.id]: payload.reply }));
+      setItems((current) => current.map((candidate) => (
+        candidate.id === item.id
+          ? { ...candidate, reply: payload.reply, action: payload.action || "reply", replySource: payload.source || "openai" }
+          : candidate
+      )));
+      setRowStatuses((current) => ({
+        ...current,
+        [item.id]: { status: "draft", message: "New draft" },
+      }));
+    } catch (regenerateError) {
+      const message = formatApiError(regenerateError.message || "Regenerate failed");
+      setRowStatuses((current) => ({ ...current, [item.id]: { status: "failed", message } }));
+      setError(message);
+    }
+  }
+
+  async function runBulk(action) {
+    const targets = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, action));
+    if (!targets.length) {
+      setError("No selected comments match this action");
+      return;
+    }
+
+    setIsBulkRunning(true);
+    for (const item of targets) {
+      await runManualAction(item, action);
+    }
+    setIsBulkRunning(false);
+  }
+
   useEffect(() => {
     void loadLatestComments();
   }, []);
 
+  const queueTabs = [
+    { id: "needs_reply", label: "Needs reply", predicate: (item) => isPending(item) && item.action === "reply" },
+    { id: "needs_delete", label: "Needs delete", predicate: (item) => isPending(item) && item.action === "delete" },
+    { id: "unclear", label: "Unclear", predicate: (item) => isPending(item) && (item.action === "review" || `${item.category || item.smartCategory || ""}`.includes("unclear")) },
+    { id: "published", label: "Published", predicate: (item) => getItemStatus(item) === "published" },
+    { id: "skipped", label: "Skipped", predicate: (item) => getItemStatus(item) === "skipped" },
+    { id: "all", label: "All", predicate: () => true },
+  ];
+
+  const activeTab = queueTabs.find((tab) => tab.id === activeQueue) || queueTabs[0];
   const filteredItems = items.filter((item) => {
-    const status = item.status || "pending";
-    const matchesStatus = statusFilter === "all" || status === statusFilter;
+    const matchesQueue = activeTab.predicate(item);
     const haystack = [
       item.comment,
       item.reply,
       item.detectedLanguage,
       item.category,
+      item.smartCategory,
+      item.decisionReason,
       item.action,
       item.videoId,
       item.authorName,
     ].filter(Boolean).join(" ").toLowerCase();
 
-    return matchesStatus && haystack.includes(query.trim().toLowerCase());
+    return matchesQueue && haystack.includes(query.trim().toLowerCase());
   });
+  const queueCounts = Object.fromEntries(queueTabs.map((tab) => [tab.id, items.filter(tab.predicate).length]));
+
+  function toggleSelected(itemId) {
+    setSelectedIds((current) => (
+      current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]
+    ));
+  }
+
+  function toggleVisibleSelection() {
+    const visibleIds = filteredItems.filter((item) => isPending(item)).map((item) => item.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    setSelectedIds((current) => (
+      allVisibleSelected
+        ? current.filter((id) => !visibleIds.includes(id))
+        : [...new Set([...current, ...visibleIds])]
+    ));
+  }
 
   return (
     <div className="page-stack">
-      <div className="toolbar">
-        <label className="search-box">
-          <Search size={17} />
-          <input
-            placeholder="Search comments, videos, categories"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
+      <section className="queue-header panel">
+        <div className="queue-topline">
+          <div>
+            <h2>Comment cockpit</h2>
+            <p className="field-note">Review, edit, publish, delete, skip, and see why AI made each call.</p>
+          </div>
+          <button className="filter-button" onClick={loadLatestComments} disabled={isLoading} type="button">
+            <RefreshCw size={16} />
+            {isLoading ? "Loading" : "Refresh"}
+          </button>
+        </div>
+        <div className="queue-tabs">
+          {queueTabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={activeQueue === tab.id ? "queue-tab active" : "queue-tab"}
+              onClick={() => setActiveQueue(tab.id)}
+              type="button"
+            >
+              {tab.label}
+              <span>{queueCounts[tab.id]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="toolbar queue-toolbar">
+          <label className="search-box">
+            <Search size={17} />
+            <input
+              placeholder="Search comments, videos, categories"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <label className="inline-select">
+            <span>Tone</span>
+            <select value={tone} onChange={(event) => setTone(event.target.value)}>
+              <option>Warm</option>
+              <option>Playful</option>
+              <option>Calm</option>
+              <option>Grateful</option>
+              <option>Professional</option>
+            </select>
+          </label>
+        </div>
+        <label className="voice-profile">
+          <span>Creator voice</span>
+          <input value={voiceProfile} onChange={(event) => setVoiceProfile(event.target.value)} />
         </label>
-        <select className="filter-button" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-          <option value="all">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="published">Published</option>
-          <option value="deleted">Deleted</option>
-          <option value="skipped">Skipped</option>
-        </select>
-        <button className="filter-button" onClick={loadLatestComments} disabled={isLoading} type="button">
-          <RefreshCw size={16} />
-          {isLoading ? "Loading" : "Refresh"}
-        </button>
-      </div>
+      </section>
       {latestRun && (
         <p className="field-note">
           Showing latest {latestRun.source === "youtube" ? "YouTube" : "manual"} run from {new Date(latestRun.createdAt).toLocaleString()}.
         </p>
       )}
       {error && <p className="error-text">{error}</p>}
+      {selectedIds.length > 0 && (
+        <div className="bulk-bar">
+          <strong>{selectedIds.length} selected</strong>
+          <button className="mini-action publish" onClick={() => runBulk("reply")} disabled={isBulkRunning} type="button">
+            Publish selected replies
+          </button>
+          <button className="mini-action delete" onClick={() => runBulk("delete")} disabled={isBulkRunning} type="button">
+            Delete selected
+          </button>
+          <button className="mini-action" onClick={() => runBulk("skip")} disabled={isBulkRunning} type="button">
+            Skip selected
+          </button>
+          <button className="mini-action secondary" onClick={() => setSelectedIds([])} type="button">
+            Clear
+          </button>
+        </div>
+      )}
       <div className="table-wrap">
-        <table>
+        <table className="review-table">
           <thead>
             <tr>
+              <th className="checkbox-cell">
+                <button className="select-all" onClick={toggleVisibleSelection} type="button" title="Select visible pending">
+                  <CheckSquare size={16} />
+                </button>
+              </th>
               <th>Comment</th>
-              <th>AI Reply</th>
+              <th>AI decision</th>
               <th>Language</th>
-              <th>Category</th>
-              <th>Action</th>
               <th>Video</th>
-              <th>Date</th>
-              <th>Status</th>
+              <th>Reply / action</th>
+              <th>Manual</th>
             </tr>
           </thead>
           <tbody>
-            {filteredItems.map((item) => (
-              <tr key={item.id}>
-                <td>{item.comment}</td>
-                <td>{item.reply}</td>
-                <td>
-                  <LanguageCell language={item.detectedLanguage || item.language} confidence={item.languageConfidence || item.confidence} />
-                </td>
-                <td><Badge value={item.category} /></td>
-                <td>{item.action}</td>
-                <td>
-                  <div className="link-stack">
-                    <span>{item.video || item.videoId || "unknown-video"}</span>
-                    {item.videoUrl && <a href={item.videoUrl} target={YOUTUBE_WINDOW_TARGET}>Open video</a>}
-                    {item.commentUrl && <a href={item.commentUrl} target={YOUTUBE_WINDOW_TARGET}>Open comment</a>}
-                    {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target={YOUTUBE_WINDOW_TARGET}>Open in Studio</a>}
-                  </div>
-                </td>
-                <td>{item.processedAt ? new Date(item.processedAt).toLocaleString() : latestRun?.createdAt ? new Date(latestRun.createdAt).toLocaleString() : item.date}</td>
-                <td><StatusPill status={item.status || "pending"} /></td>
-              </tr>
-            ))}
+            {filteredItems.map((item) => {
+              const manualStatus = rowStatuses[item.id];
+              const currentStatus = manualStatus?.status || getItemStatus(item);
+              const isWorking = currentStatus === "working";
+              const replyValue = editedReplies[item.id] ?? item.reply ?? "";
+              const selected = selectedIds.includes(item.id);
+
+              return (
+                <tr key={item.id}>
+                  <td className="checkbox-cell">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      disabled={!isPending(item)}
+                      onChange={() => toggleSelected(item.id)}
+                      aria-label={`Select ${item.id}`}
+                    />
+                  </td>
+                  <td>
+                    <div className="comment-cell">
+                      <strong>{item.comment}</strong>
+                      <span>{item.authorName || "Viewer"}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="decision-stack">
+                      <div className="decision-line">
+                        <StatusPill status={item.action} />
+                        <Badge value={item.smartCategory || item.category} />
+                      </div>
+                      <p>{item.decisionReason || fallbackDecisionReason(item)}</p>
+                    </div>
+                  </td>
+                  <td>
+                    <LanguageCell language={item.detectedLanguage || item.language} confidence={item.languageConfidence || item.confidence} />
+                  </td>
+                  <td>
+                    <div className="link-stack">
+                      <span>{item.video || item.videoId || "unknown-video"}</span>
+                      {item.videoUrl && <a href={item.videoUrl} target={YOUTUBE_WINDOW_TARGET}>Open video</a>}
+                      {item.commentUrl && <a href={item.commentUrl} target={YOUTUBE_WINDOW_TARGET}>Open comment</a>}
+                      {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target={YOUTUBE_WINDOW_TARGET}>Open in Studio</a>}
+                      <button className="link-button" onClick={() => copyCommentReference(item)} type="button">
+                        Copy ref
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    {item.action === "reply" || currentStatus === "published" ? (
+                      <div className="reply-cell">
+                        <textarea
+                          className="reply-editor"
+                          value={replyValue}
+                          onChange={(event) => setEditedReplies((current) => ({ ...current, [item.id]: event.target.value }))}
+                          rows={3}
+                        />
+                        <div className="reply-meta">
+                          <span>{replyValue.length}/120</span>
+                          <span>{item.replySource === "openai" ? "GPT" : item.replySource || "draft"}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <strong>DELETE</strong>
+                    )}
+                  </td>
+                  <td>
+                    <div className="manual-actions">
+                      <StatusPill status={currentStatus}>{manualStatus?.message || currentStatus}</StatusPill>
+                      {manualStatus?.url && (
+                        <a className="mini-link" href={manualStatus.url} target={YOUTUBE_WINDOW_TARGET}>
+                          View result
+                        </a>
+                      )}
+                      {manualStatus?.studioUrl && (
+                        <a className="mini-link" href={manualStatus.studioUrl} target={YOUTUBE_WINDOW_TARGET}>
+                          Studio
+                        </a>
+                      )}
+                      {(item.action === "reply" || currentStatus === "published") && (
+                        <>
+                          <button
+                            className="mini-action secondary"
+                            onClick={() => regenerateReply(item)}
+                            disabled={isWorking}
+                            type="button"
+                          >
+                            <Sparkles size={13} />
+                            Regenerate
+                          </button>
+                          <button
+                            className="mini-action publish"
+                            onClick={() => runManualAction(item, "reply")}
+                            disabled={!canRunAction(item, "reply") || isWorking}
+                            type="button"
+                          >
+                            Publish
+                          </button>
+                        </>
+                      )}
+                      {item.action === "delete" && (
+                        <button
+                          className="mini-action delete"
+                          onClick={() => runManualAction(item, "delete")}
+                          disabled={!canRunAction(item, "delete") || isWorking}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      )}
+                      <button
+                        className="mini-action"
+                        onClick={() => runManualAction(item, "skip")}
+                        disabled={!isPending(item) || isWorking}
+                        type="button"
+                      >
+                        Skip
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
             {!filteredItems.length && (
               <tr>
-                <td colSpan={8}>{isLoading ? "Loading comments..." : "No comments to show yet. Run YouTube dry run first."}</td>
+                <td colSpan={7}>{isLoading ? "Loading comments..." : "No comments in this queue. Run YouTube dry run or switch tabs."}</td>
               </tr>
             )}
           </tbody>
@@ -378,6 +676,50 @@ function Comments() {
       </div>
     </div>
   );
+}
+
+function getItemStatus(item) {
+  return item?.status || "pending";
+}
+
+function isPending(item) {
+  return getItemStatus(item) === "pending";
+}
+
+function canRunAction(item, action) {
+  if (!isPending(item)) {
+    return false;
+  }
+  if (action === "reply") {
+    return item.action === "reply";
+  }
+  if (action === "delete") {
+    return item.action === "delete";
+  }
+  return true;
+}
+
+function fallbackDecisionReason(item) {
+  if (item.action === "delete") {
+    return `Safety filter marked this as ${item.category || "unsafe"}.`;
+  }
+  if (item.action === "review") {
+    return "AI was not confident enough, so this needs manual review.";
+  }
+  return "Safe enough for a short creator reply.";
+}
+
+async function copyCommentReference(item) {
+  const text = [
+    item.comment,
+    "",
+    `Comment ID: ${item.id}`,
+    item.videoUrl ? `Video: ${item.videoUrl}` : "",
+    item.commentUrl ? `Comment link: ${item.commentUrl}` : "",
+    item.studioCommentsUrl ? `Studio: ${item.studioCommentsUrl}` : "",
+  ].filter(Boolean).join("\n");
+
+  await navigator.clipboard.writeText(text);
 }
 
 function BatchTest() {
@@ -681,6 +1023,8 @@ dm me for collab`);
 
 function AISettings({ prompt, setPrompt, emoji, setEmoji }) {
   const [languageMode, setLanguageMode] = useState("Same as commenter");
+  const [tonePreset, setTonePreset] = useState("Warm");
+  const [voiceProfile, setVoiceProfile] = useState("Warm, calm ASMR creator. Short replies, no sales. Avoid sounding generic.");
   const isEnglishOnly = languageMode === "English only";
   const fallbackLabel = isEnglishOnly
     ? "Reply language"
@@ -705,9 +1049,141 @@ function AISettings({ prompt, setPrompt, emoji, setEmoji }) {
         <Field label="Max length" value="120" type="number" />
         <Field label="Daily limit" value="50" type="number" />
         <Select label="Reply mode" options={["Full Auto", "Manual Approve", "Off"]} />
+        <Select
+          label="Tone preset"
+          options={["Warm", "Playful", "Calm", "Grateful", "Professional"]}
+          value={tonePreset}
+          onChange={setTonePreset}
+        />
+        <label className="field">
+          <span>Creator voice profile</span>
+          <textarea
+            className="voice-textarea"
+            value={voiceProfile}
+            onChange={(event) => setVoiceProfile(event.target.value)}
+            rows={4}
+          />
+        </label>
         <Field label="Max emoji" value="3" type="number" />
         <Toggle label="Emoji" checked={emoji} onChange={setEmoji} note="0-3 emoji maximum" />
       </Panel>
+    </div>
+  );
+}
+
+function Insights() {
+  const [insights, setInsights] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function loadInsights() {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_URL}/api/insights`);
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to load insights");
+      }
+      setInsights(payload);
+    } catch (insightError) {
+      setError(insightError.message || "Failed to load insights");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadInsights();
+  }, []);
+
+  const totals = insights?.totals || {};
+  const quota = insights?.quotaGuard || {};
+
+  return (
+    <div className="page-stack">
+      <div className="toolbar">
+        <button className="filter-button" onClick={loadInsights} disabled={loading} type="button">
+          <RefreshCw size={16} />
+          {loading ? "Loading" : "Refresh insights"}
+        </button>
+        {error && <span className="error-text">{error}</span>}
+      </div>
+      <section className="insight-grid">
+        <article className="insight-card">
+          <BarChart3 size={20} />
+          <span>Total reviewed</span>
+          <strong>{totals.comments || totals.total || 0}</strong>
+        </article>
+        <article className="insight-card">
+          <MessageSquareText size={20} />
+          <span>Reply candidates</span>
+          <strong>{totals.replies || 0}</strong>
+        </article>
+        <article className="insight-card">
+          <Trash2 size={20} />
+          <span>Delete candidates</span>
+          <strong>{totals.deletes || 0}</strong>
+        </article>
+        <article className="insight-card quota">
+          <Gauge size={20} />
+          <span>Estimated quota units</span>
+          <strong>{quota.estimatedUnits || 0}</strong>
+        </article>
+      </section>
+      <section className="settings-grid">
+        <Panel title="Smart Categories">
+          <CountList items={insights?.topCategories || []} empty="No categories yet" />
+        </Panel>
+        <Panel title="Video Hotspots">
+          <CountList items={insights?.videoHotspots || []} empty="No video data yet" />
+        </Panel>
+      </section>
+      <Panel title="Content Ideas">
+        <div className="idea-list">
+          {(insights?.contentIdeas || []).map((idea) => (
+            <div className="idea-row" key={`${idea.videoId}-${idea.idea}`}>
+              <Lightbulb size={18} />
+              <div>
+                <strong>{idea.idea}</strong>
+                <span>{idea.videoId} · {idea.comment || "viewer signal"}</span>
+              </div>
+            </div>
+          ))}
+          {!insights?.contentIdeas?.length && <p className="field-note">No content ideas yet. Run more YouTube dry runs first.</p>}
+        </div>
+      </Panel>
+      <Panel title="Quota Guard">
+        <div className="quota-guard">
+          <StatusRow label="Current run units" value={quota.estimatedUnits || 0} />
+          <StatusRow label="Projected safe daily runs" value={quota.safeDailyRuns || "Unknown"} />
+          <StatusRow label="Suggested mode" value={quota.recommendation || quota.nextRunAdvice || "Manual review"} />
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function CountList({ items, empty }) {
+  if (!items?.length) {
+    return <p className="field-note">{empty}</p>;
+  }
+
+  const getCount = (item) => item.count ?? item.value ?? 0;
+  const max = Math.max(...items.map(getCount), 1);
+  return (
+    <div className="count-list">
+      {items.map((item) => (
+        <div className="count-row" key={item.label}>
+          <div>
+            <strong>{item.label}</strong>
+            <span>{getCount(item)}</span>
+          </div>
+          <div className="count-bar">
+            <span style={{ width: `${Math.max(8, (getCount(item) / max) * 100)}%` }} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -795,7 +1271,10 @@ function StatusRow({ label, value }) {
 }
 
 function Badge({ value }) {
-  return <span className={`badge ${value.includes("safe") ? "safe" : "risk"}`}>{value}</span>;
+  const label = value || "unknown";
+  const normalized = String(label).toLowerCase();
+  const isSafe = ["safe", "praise", "conversation", "question", "request", "emoji_reaction"].some((token) => normalized.includes(token));
+  return <span className={`badge ${isSafe ? "safe" : "risk"}`}>{label}</span>;
 }
 
 function StatusPill({ status, children }) {
@@ -803,11 +1282,12 @@ function StatusPill({ status, children }) {
 }
 
 function LanguageCell({ language, confidence }) {
-  const percent = Math.round(confidence * 100);
+  const numericConfidence = Number(confidence);
+  const percent = Number.isFinite(numericConfidence) ? Math.round(numericConfidence * 100) : null;
   return (
     <div className="language-cell">
-      <strong>{language}</strong>
-      <span>{percent}%</span>
+      <strong>{language || "Unknown"}</strong>
+      {percent !== null && <span>{percent}%</span>}
     </div>
   );
 }

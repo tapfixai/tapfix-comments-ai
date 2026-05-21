@@ -208,6 +208,85 @@ h2 {
   gap: 10px;
 }
 
+.queue-header {
+  display: grid;
+  gap: 14px;
+}
+
+.queue-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.queue-topline .field-note {
+  margin: 0;
+}
+
+.queue-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.queue-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.queue-tab span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.queue-tab.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+}
+
+.queue-toolbar {
+  align-items: stretch;
+}
+
+.voice-profile {
+  display: grid;
+  gap: 7px;
+}
+
+.voice-profile span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.voice-profile input {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  outline: 0;
+}
+
 .icon-button,
 .primary-button,
 .filter-button {
@@ -414,6 +493,10 @@ table {
   border-collapse: collapse;
 }
 
+.review-table {
+  min-width: 1280px;
+}
+
 th,
 td {
   padding: 13px 14px;
@@ -435,6 +518,82 @@ td:nth-child(2) {
   max-width: 260px;
 }
 
+.review-table td:first-child {
+  max-width: none;
+}
+
+.review-table td:nth-child(2) {
+  max-width: 320px;
+}
+
+.checkbox-cell {
+  width: 44px;
+}
+
+.checkbox-cell input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.select-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.comment-cell,
+.decision-stack,
+.reply-cell {
+  display: grid;
+  gap: 8px;
+}
+
+.comment-cell strong {
+  line-height: 1.4;
+}
+
+.comment-cell span,
+.decision-stack p,
+.reply-meta {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.decision-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.bulk-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.bulk-bar strong {
+  margin-right: 4px;
+  font-size: 13px;
+}
+
 .badge,
 .status-pill {
   display: inline-flex;
@@ -449,20 +608,23 @@ td:nth-child(2) {
 
 .badge.safe,
 .status-pill.published,
-.status-pill.reply {
+.status-pill.reply,
+.status-pill.draft {
   background: var(--success-bg);
   color: var(--success);
 }
 
 .badge.risk,
 .status-pill.deleted,
-.status-pill.failed {
+.status-pill.failed,
+.status-pill.delete {
   background: var(--danger-bg);
   color: var(--danger);
 }
 
 .status-pill.review,
-.status-pill.working {
+.status-pill.working,
+.status-pill.pending {
   background: rgba(249, 171, 0, 0.18);
   color: var(--warning);
 }
@@ -513,6 +675,10 @@ td:nth-child(2) {
 }
 
 .mini-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   min-height: 30px;
   padding: 0 10px;
   border: 1px solid var(--border-strong);
@@ -533,9 +699,26 @@ td:nth-child(2) {
   color: var(--danger);
 }
 
+.mini-action.secondary {
+  color: var(--muted);
+}
+
 .mini-action:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.reply-editor {
+  min-height: 82px;
+  padding: 10px;
+  border-radius: 8px;
+  line-height: 1.35;
+}
+
+.reply-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 textarea,
@@ -558,6 +741,10 @@ textarea {
 
 .batch-input {
   min-height: 280px;
+}
+
+.voice-textarea {
+  min-height: 104px;
 }
 
 .batch-actions {
@@ -676,6 +863,104 @@ textarea {
   gap: 12px;
 }
 
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.insight-card {
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.insight-card svg {
+  color: var(--blue);
+}
+
+.insight-card.quota svg {
+  color: var(--warning);
+}
+
+.insight-card span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.insight-card strong {
+  font-size: 30px;
+}
+
+.count-list,
+.idea-list,
+.quota-guard {
+  display: grid;
+  gap: 12px;
+}
+
+.count-row {
+  display: grid;
+  gap: 7px;
+}
+
+.count-row div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.count-row strong {
+  font-size: 13px;
+}
+
+.count-row span,
+.idea-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.count-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+
+.count-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.idea-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.idea-row:first-child {
+  border-top: 0;
+}
+
+.idea-row svg {
+  color: var(--warning);
+}
+
+.idea-row strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 14px;
+}
+
 .action-list.compact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -725,7 +1010,7 @@ textarea {
   }
 
   nav {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
   .nav-item {
@@ -739,6 +1024,7 @@ textarea {
   }
 
   .metric-grid,
+  .insight-grid,
   .batch-layout,
   .settings-grid,
   .action-list.compact {
