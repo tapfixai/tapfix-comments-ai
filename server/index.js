@@ -468,6 +468,18 @@ function uniqueReplyAlternatives(language) {
     "Glad you enjoyed this one.",
     "Thank you so much ❤️",
     "Really appreciate it ❤️",
+    "That means a lot, thank you.",
+    "Happy you liked this one.",
+    "Thanks, glad it felt good to watch.",
+    "I appreciate the kind comment.",
+    "So nice to hear, thank you.",
+    "Thanks for spending time here.",
+    "Glad this one connected with you.",
+    "Thank you, that is really kind.",
+    "Happy you enjoyed the video.",
+    "Thanks, I appreciate you being here.",
+    "So glad you liked the vibe.",
+    "Thank you for the sweet comment.",
   ];
 }
 
