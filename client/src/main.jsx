@@ -509,23 +509,39 @@ function Comments() {
         </p>
       )}
       {error && <p className="error-text">{error}</p>}
-      {selectedIds.length > 0 && (
-        <div className="bulk-bar">
-          <strong>{selectedIds.length} selected</strong>
-          <button className="mini-action publish" onClick={() => runBulk("reply")} disabled={isBulkRunning} type="button">
-            Publish selected replies
-          </button>
-          <button className="mini-action delete" onClick={() => runBulk("delete")} disabled={isBulkRunning} type="button">
-            Delete selected
-          </button>
-          <button className="mini-action" onClick={() => runBulk("skip")} disabled={isBulkRunning} type="button">
-            Skip selected
-          </button>
+      <div className={selectedIds.length > 0 ? "bulk-bar" : "bulk-bar empty"}>
+        <strong>{selectedIds.length} selected</strong>
+        {selectedIds.length === 0 && <span className="bulk-hint">Select comments with the checkboxes to use bulk actions.</span>}
+        <button
+          className="mini-action publish"
+          onClick={() => runBulk("reply")}
+          disabled={selectedIds.length === 0 || isBulkRunning}
+          type="button"
+        >
+          Publish selected replies
+        </button>
+        <button
+          className="mini-action delete"
+          onClick={() => runBulk("delete")}
+          disabled={selectedIds.length === 0 || isBulkRunning}
+          type="button"
+        >
+          Delete selected
+        </button>
+        <button
+          className="mini-action"
+          onClick={() => runBulk("skip")}
+          disabled={selectedIds.length === 0 || isBulkRunning}
+          type="button"
+        >
+          Skip selected
+        </button>
+        {selectedIds.length > 0 && (
           <button className="mini-action secondary" onClick={() => setSelectedIds([])} type="button">
             Clear
           </button>
-        </div>
-      )}
+        )}
+      </div>
       <div className="table-wrap">
         <table className="review-table">
           <thead>
@@ -593,20 +609,37 @@ function Comments() {
                   </td>
                   <td>
                     {item.action === "reply" || currentStatus === "published" ? (
-                      <div className="reply-cell">
+                      <div className="reply-cell generated-reply">
+                        <div className="reply-label-row">
+                          <span>Generated reply</span>
+                          <button
+                            className="mini-action secondary"
+                            onClick={() => regenerateReply(item)}
+                            disabled={isWorking}
+                            type="button"
+                          >
+                            <Sparkles size={13} />
+                            Regenerate reply
+                          </button>
+                        </div>
                         <textarea
                           className="reply-editor"
                           value={replyValue}
                           onChange={(event) => setEditedReplies((current) => ({ ...current, [item.id]: event.target.value }))}
+                          placeholder="Edit the reply before publishing"
                           rows={3}
                         />
                         <div className="reply-meta">
-                          <span>{replyValue.length}/120</span>
+                          <span>Edit before publish</span>
                           <span>{item.replySource === "openai" ? "GPT" : item.replySource || "draft"}</span>
+                          <span>{replyValue.length}/120</span>
                         </div>
                       </div>
                     ) : (
-                      <strong>DELETE</strong>
+                      <div className="delete-decision">
+                        <strong>DELETE</strong>
+                        <span>No reply will be published for this comment.</span>
+                      </div>
                     )}
                   </td>
                   <td>
@@ -623,25 +656,14 @@ function Comments() {
                         </a>
                       )}
                       {(item.action === "reply" || currentStatus === "published") && (
-                        <>
-                          <button
-                            className="mini-action secondary"
-                            onClick={() => regenerateReply(item)}
-                            disabled={isWorking}
-                            type="button"
-                          >
-                            <Sparkles size={13} />
-                            Regenerate
-                          </button>
-                          <button
-                            className="mini-action publish"
-                            onClick={() => runManualAction(item, "reply")}
-                            disabled={!canRunAction(item, "reply") || isWorking}
-                            type="button"
-                          >
-                            Publish
-                          </button>
-                        </>
+                        <button
+                          className="mini-action publish"
+                          onClick={() => runManualAction(item, "reply")}
+                          disabled={!canRunAction(item, "reply") || isWorking}
+                          type="button"
+                        >
+                          Publish edited reply
+                        </button>
                       )}
                       {item.action === "delete" && (
                         <button

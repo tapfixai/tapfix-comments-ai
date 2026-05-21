@@ -555,6 +555,29 @@ td:nth-child(2) {
   gap: 8px;
 }
 
+.generated-reply {
+  min-width: 280px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.reply-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reply-label-row span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .comment-cell strong {
   line-height: 1.4;
 }
@@ -589,8 +612,19 @@ td:nth-child(2) {
   box-shadow: var(--shadow);
 }
 
+.bulk-bar.empty {
+  position: static;
+  border-style: dashed;
+  box-shadow: none;
+}
+
 .bulk-bar strong {
   margin-right: 4px;
+  font-size: 13px;
+}
+
+.bulk-hint {
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -719,6 +753,17 @@ td:nth-child(2) {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+}
+
+.delete-decision {
+  display: grid;
+  gap: 6px;
+}
+
+.delete-decision span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 textarea,
