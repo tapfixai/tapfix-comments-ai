@@ -3,7 +3,7 @@
   publish = "dist"
 
 [build.environment]
-  VITE_API_URL = "https://api-comments.tapfixai.app"
+  VITE_API_URL = "https://tapfix-comments-ai-production.up.railway.app"
 
 [[redirects]]
   from = "/*"
