@@ -256,12 +256,13 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
 
   try {
     const accessToken = await getValidYouTubeAccessToken(connectedUser);
+    const requestedLimit = parsed.data?.maxResults || 25;
     const comments = await fetchLatestYouTubeComments({
       accessToken,
       channelId: connectedUser.youtubeChannelId,
-      maxResults: parsed.data?.maxResults || 25,
+      maxResults: Math.min(500, Math.max(100, requestedLimit * 5)),
     });
-    const unprocessedComments = await filterUnprocessedComments(comments);
+    const unprocessedComments = (await filterUnprocessedComments(comments)).slice(0, requestedLimit);
 
     if (!unprocessedComments.length) {
       addLog("youtube_dry_run", `No recent YouTube comments found for ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId}`);
@@ -285,7 +286,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
       channelTitle: connectedUser.youtubeChannelTitle,
     });
 
-    addLog("youtube_dry_run", `Analyzed ${run.total} YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId}`);
+    addLog("youtube_dry_run", `Analyzed ${run.total} YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${comments.length}`);
     return run;
   } catch (error) {
     const statusCode = Number(error.statusCode || 502);
@@ -357,7 +358,7 @@ server.post("/api/youtube/comments/:commentId/delete", async (request, reply) =>
 
   try {
     const accessToken = await getValidYouTubeAccessToken(connectedUser);
-    await deleteYouTubeComment({
+    await rejectYouTubeComment({
       accessToken,
       commentId: request.params.commentId,
     });
@@ -971,12 +972,13 @@ async function publishYouTubeReply({ accessToken, commentId, text }) {
   return payload;
 }
 
-async function deleteYouTubeComment({ accessToken, commentId }) {
-  const url = new URL("https://www.googleapis.com/youtube/v3/comments");
+async function rejectYouTubeComment({ accessToken, commentId }) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/comments/setModerationStatus");
   url.searchParams.set("id", commentId);
+  url.searchParams.set("moderationStatus", "rejected");
 
   const response = await fetch(url, {
-    method: "DELETE",
+    method: "POST",
     headers: { authorization: `Bearer ${accessToken}` },
   });
   const payload = await response.json().catch(() => ({}));

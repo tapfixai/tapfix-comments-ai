@@ -22,6 +22,7 @@ import {
 import "./styles.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8080";
+const YOUTUBE_WINDOW_TARGET = "tapfix_youtube";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Gauge },
@@ -357,9 +358,9 @@ function Comments() {
                 <td>
                   <div className="link-stack">
                     <span>{item.video || item.videoId || "unknown-video"}</span>
-                    {item.videoUrl && <a href={item.videoUrl} target="_blank" rel="noreferrer">Open video</a>}
-                    {item.commentUrl && <a href={item.commentUrl} target="_blank" rel="noreferrer">Open comment</a>}
-                    {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target="_blank" rel="noreferrer">Open in Studio</a>}
+                    {item.videoUrl && <a href={item.videoUrl} target={YOUTUBE_WINDOW_TARGET}>Open video</a>}
+                    {item.commentUrl && <a href={item.commentUrl} target={YOUTUBE_WINDOW_TARGET}>Open comment</a>}
+                    {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target={YOUTUBE_WINDOW_TARGET}>Open in Studio</a>}
                   </div>
                 </td>
                 <td>{item.processedAt ? new Date(item.processedAt).toLocaleString() : latestRun?.createdAt ? new Date(latestRun.createdAt).toLocaleString() : item.date}</td>
@@ -618,9 +619,9 @@ dm me for collab`);
                     <td>
                       <div className="link-stack">
                         <span>{item.videoId || "manual-test"}</span>
-                        {item.videoUrl && <a href={item.videoUrl} target="_blank" rel="noreferrer">Open video</a>}
-                        {item.commentUrl && <a href={item.commentUrl} target="_blank" rel="noreferrer">Open comment</a>}
-                        {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target="_blank" rel="noreferrer">Open in Studio</a>}
+                        {item.videoUrl && <a href={item.videoUrl} target={YOUTUBE_WINDOW_TARGET}>Open video</a>}
+                        {item.commentUrl && <a href={item.commentUrl} target={YOUTUBE_WINDOW_TARGET}>Open comment</a>}
+                        {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target={YOUTUBE_WINDOW_TARGET}>Open in Studio</a>}
                         <button className="link-button" onClick={() => copyCommentReference(item)} type="button">
                           Copy ref
                         </button>
@@ -631,12 +632,12 @@ dm me for collab`);
                       <div className="manual-actions">
                         {manualStatus && <StatusPill status={manualStatus.status}>{manualStatus.message}</StatusPill>}
                         {manualStatus?.url && (
-                          <a className="mini-link" href={manualStatus.url} target="_blank" rel="noreferrer">
+                          <a className="mini-link" href={manualStatus.url} target={YOUTUBE_WINDOW_TARGET}>
                             View result
                           </a>
                         )}
                         {manualStatus?.studioUrl && (
-                          <a className="mini-link" href={manualStatus.studioUrl} target="_blank" rel="noreferrer">
+                          <a className="mini-link" href={manualStatus.studioUrl} target={YOUTUBE_WINDOW_TARGET}>
                             Studio
                           </a>
                         )}
