@@ -23,6 +23,7 @@ import "./styles.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8080";
 const YOUTUBE_WINDOW_TARGET = "tapfix_youtube";
+const MAX_STATUS_MESSAGE_LENGTH = 120;
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Gauge },
@@ -479,7 +480,7 @@ dm me for collab`);
       setLastSource("YouTube");
       window.localStorage.setItem("tapfix:lastBatchRun", JSON.stringify(payload));
     } catch (youtubeError) {
-      setError(youtubeError.message);
+      setError(formatApiError(youtubeError.message));
     } finally {
       setIsRunning(false);
     }
@@ -505,7 +506,7 @@ dm me for collab`);
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.message || payload.error || `${action} failed`);
+        throw new Error(formatApiError(payload.message || payload.error || `${action} failed`));
       }
 
       setCommentStatuses((current) => ({
@@ -520,9 +521,9 @@ dm me for collab`);
     } catch (manualError) {
       setCommentStatuses((current) => ({
         ...current,
-        [item.id]: { status: "failed", message: manualError.message || "Failed" },
+        [item.id]: { status: "failed", message: formatApiError(manualError.message || "Failed") },
       }));
-      setError(manualError.message || `${action} failed`);
+      setError(formatApiError(manualError.message || `${action} failed`));
     }
   }
 
@@ -883,6 +884,23 @@ function formatApiLog(log) {
       : "",
     status: action.includes("error") || action.includes("warning") ? "warning" : "ok",
   };
+}
+
+function formatApiError(message) {
+  const stripped = String(message || "Request failed")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (/quota|exceeded|ratelimit/i.test(stripped)) {
+    return "YouTube API quota exceeded. Try again after quota reset or request a quota increase.";
+  }
+
+  if (stripped.length <= MAX_STATUS_MESSAGE_LENGTH) {
+    return stripped;
+  }
+
+  return `${stripped.slice(0, MAX_STATUS_MESSAGE_LENGTH - 1)}…`;
 }
 
 createRoot(document.getElementById("root")).render(<App />);

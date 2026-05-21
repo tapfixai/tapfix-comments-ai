@@ -290,10 +290,10 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
     return run;
   } catch (error) {
     const statusCode = Number(error.statusCode || 502);
-    addLog("youtube_dry_run_error", error.message || "YouTube dry-run failed");
+    addLog("youtube_dry_run_error", error.userMessage || error.message || "YouTube dry-run failed");
     return reply.code(statusCode >= 400 && statusCode < 600 ? statusCode : 502).send({
       error: "youtube_dry_run_failed",
-      message: error.message || "YouTube dry-run failed",
+      message: error.userMessage || error.message || "YouTube dry-run failed",
       details: error.details,
     });
   }
@@ -341,10 +341,10 @@ server.post("/api/youtube/comments/:commentId/reply", async (request, reply) => 
     };
   } catch (error) {
     const statusCode = Number(error.statusCode || 502);
-    addLog("youtube_reply_error", `${request.params.commentId}: ${error.message || "Reply failed"}`);
+    addLog("youtube_reply_error", `${request.params.commentId}: ${error.userMessage || error.message || "Reply failed"}`);
     return reply.code(statusCode >= 400 && statusCode < 600 ? statusCode : 502).send({
       error: "youtube_reply_failed",
-      message: error.message || "Reply failed",
+      message: error.userMessage || error.message || "Reply failed",
       details: error.details,
     });
   }
@@ -376,10 +376,10 @@ server.post("/api/youtube/comments/:commentId/delete", async (request, reply) =>
     };
   } catch (error) {
     const statusCode = Number(error.statusCode || 502);
-    addLog("youtube_delete_error", `${request.params.commentId}: ${error.message || "Delete failed"}`);
+    addLog("youtube_delete_error", `${request.params.commentId}: ${error.userMessage || error.message || "Delete failed"}`);
     return reply.code(statusCode >= 400 && statusCode < 600 ? statusCode : 502).send({
       error: "youtube_delete_failed",
-      message: error.message || "Delete failed",
+      message: error.userMessage || error.message || "Delete failed",
       details: error.details,
     });
   }
@@ -835,7 +835,7 @@ async function fetchYouTubeChannel(accessToken) {
     headers: { authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) {
-    throw new Error(`youtube_channel_request_failed_${response.status}`);
+    throw makeGoogleApiError({ payload: await response.json().catch(() => ({})), status: response.status, fallback: "YouTube channel request failed" });
   }
   const data = await response.json();
   const channel = data.items?.[0];
@@ -911,11 +911,7 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const errorMessage = payload.error?.message || `youtube_comments_request_failed_${response.status}`;
-      const error = new Error(errorMessage);
-      error.statusCode = response.status;
-      error.details = payload;
-      throw error;
+      throw makeGoogleApiError({ payload, status: response.status, fallback: "YouTube comments request failed" });
     }
 
     const pageComments = (payload.items || [])
@@ -962,11 +958,7 @@ async function publishYouTubeReply({ accessToken, commentId, text }) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const errorMessage = payload.error?.message || `youtube_reply_request_failed_${response.status}`;
-    const error = new Error(errorMessage);
-    error.statusCode = response.status;
-    error.details = payload;
-    throw error;
+    throw makeGoogleApiError({ payload, status: response.status, fallback: "YouTube reply request failed" });
   }
 
   return payload;
@@ -984,14 +976,54 @@ async function rejectYouTubeComment({ accessToken, commentId }) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const errorMessage = payload.error?.message || `youtube_delete_request_failed_${response.status}`;
-    const error = new Error(errorMessage);
-    error.statusCode = response.status;
-    error.details = payload;
-    throw error;
+    throw makeGoogleApiError({ payload, status: response.status, fallback: "YouTube delete request failed" });
   }
 
   return true;
+}
+
+function makeGoogleApiError({ payload, status, fallback }) {
+  const reason = payload?.error?.errors?.[0]?.reason || payload?.error?.status || payload?.error;
+  const rawMessage = payload?.error?.message || fallback || `google_api_request_failed_${status}`;
+  const cleanMessage = stripHtml(rawMessage);
+  const message = humanizeGoogleApiError(reason, cleanMessage, status);
+  const error = new Error(message);
+  error.userMessage = message;
+  error.statusCode = status;
+  error.details = payload;
+  error.reason = reason;
+  return error;
+}
+
+function stripHtml(value) {
+  return String(value || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function humanizeGoogleApiError(reason, message, status) {
+  const normalizedReason = String(reason || "").toLowerCase();
+  const normalizedMessage = String(message || "").toLowerCase();
+
+  if (
+    normalizedReason.includes("quota") ||
+    normalizedReason.includes("ratelimit") ||
+    normalizedMessage.includes("quota") ||
+    normalizedMessage.includes("exceeded")
+  ) {
+    return "YouTube API quota exceeded. Try again after the daily quota reset or request a quota increase in Google Cloud.";
+  }
+
+  if (status === 401 || normalizedReason.includes("auth")) {
+    return "YouTube authorization expired. Reconnect YouTube in the panel.";
+  }
+
+  if (status === 403 || normalizedReason.includes("forbidden")) {
+    return "YouTube API refused this action. Check YouTube permissions, API quota, and OAuth scopes.";
+  }
+
+  return message || "YouTube API request failed.";
 }
 
 server.listen({ port, host });
