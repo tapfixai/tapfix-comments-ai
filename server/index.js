@@ -323,6 +323,7 @@ server.post("/api/youtube/comments/:commentId/reply", async (request, reply) => 
       status: "published",
       commentId: request.params.commentId,
       replyId: result.id,
+      replyUrl: getYouTubeCommentUrl(result.snippet?.videoId, result.id),
     };
   } catch (error) {
     const statusCode = Number(error.statusCode || 502);
@@ -472,6 +473,8 @@ async function createDryRun(comments, meta = {}) {
     results.push({
       id: comment.id,
       videoId: comment.videoId,
+      videoUrl: getYouTubeVideoUrl(comment.videoId),
+      commentUrl: getYouTubeCommentUrl(comment.videoId, comment.id),
       comment: comment.text,
       authorName: comment.authorName || "Viewer",
       action: analysis.action,
@@ -739,6 +742,23 @@ function getPublicApiUrl(request) {
 
 function getPanelUrl() {
   return process.env.WEB_ORIGIN || "http://127.0.0.1:5173";
+}
+
+function getYouTubeVideoUrl(videoId) {
+  if (!videoId || videoId === "manual-test" || videoId === "unknown-video") {
+    return null;
+  }
+
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+}
+
+function getYouTubeCommentUrl(videoId, commentId) {
+  const videoUrl = getYouTubeVideoUrl(videoId);
+  if (!videoUrl || !commentId) {
+    return null;
+  }
+
+  return `${videoUrl}&lc=${encodeURIComponent(commentId)}`;
 }
 
 function getGoogleRedirectUri(request) {

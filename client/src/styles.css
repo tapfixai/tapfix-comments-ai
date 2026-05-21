@@ -479,6 +479,29 @@ td:nth-child(2) {
   min-width: 210px;
 }
 
+.link-stack {
+  display: grid;
+  gap: 5px;
+}
+
+.link-stack span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.link-stack a,
+.mini-link {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.link-stack a:hover,
+.mini-link:hover {
+  text-decoration: underline;
+}
+
 .mini-action {
   min-height: 30px;
   padding: 0 10px;

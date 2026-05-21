@@ -496,6 +496,7 @@ dm me for collab`);
         [item.id]: {
           status: payload.status || (action === "reply" ? "published" : "deleted"),
           message: action === "reply" ? "Published" : "Deleted",
+          url: payload.replyUrl || item.commentUrl || item.videoUrl,
         },
       }));
     } catch (manualError) {
@@ -581,11 +582,22 @@ dm me for collab`);
                     <td><StatusPill status={item.action} /></td>
                     <td><LanguageCell language={item.detectedLanguage} confidence={item.languageConfidence} /></td>
                     <td><Badge value={item.category} /></td>
-                    <td>{item.videoId || "manual-test"}</td>
+                    <td>
+                      <div className="link-stack">
+                        <span>{item.videoId || "manual-test"}</span>
+                        {item.videoUrl && <a href={item.videoUrl} target="_blank" rel="noreferrer">Open video</a>}
+                        {item.commentUrl && <a href={item.commentUrl} target="_blank" rel="noreferrer">Open comment</a>}
+                      </div>
+                    </td>
                     <td>{item.reply}</td>
                     <td>
                       <div className="manual-actions">
                         {manualStatus && <StatusPill status={manualStatus.status}>{manualStatus.message}</StatusPill>}
+                        {manualStatus?.url && (
+                          <a className="mini-link" href={manualStatus.url} target="_blank" rel="noreferrer">
+                            View result
+                          </a>
+                        )}
                         {item.action === "reply" && (
                           <button
                             className="mini-action publish"
