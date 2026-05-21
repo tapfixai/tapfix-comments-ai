@@ -9,6 +9,7 @@ import { latestBatchRunFromDb, listBatchRunsFromDb, persistBatchRun } from "./db
 
 const server = Fastify({ logger: true });
 const port = Number(process.env.PORT || 8080);
+const host = process.env.HOST || "0.0.0.0";
 
 await server.register(cors, {
   origin: process.env.WEB_ORIGIN || "http://127.0.0.1:5173",
@@ -250,4 +251,4 @@ function addLog(action, message) {
   });
 }
 
-server.listen({ port, host: "127.0.0.1" });
+server.listen({ port, host });
