@@ -628,6 +628,88 @@ td:nth-child(2) {
   font-size: 13px;
 }
 
+.reply-workspace {
+  display: grid;
+  gap: 14px;
+}
+
+.reply-workspace-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reply-workspace-head h2 {
+  margin-bottom: 5px;
+}
+
+.reply-workspace-head > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--success);
+  border-radius: 999px;
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.reply-card-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.reply-review-card {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(320px, 1.15fr);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.reply-card-comment,
+.reply-card-editor {
+  display: grid;
+  gap: 9px;
+}
+
+.reply-card-comment strong {
+  line-height: 1.45;
+}
+
+.reply-card-comment > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.card-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.card-select input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--primary);
+}
+
+.reply-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .badge,
 .status-pill {
   display: inline-flex;
@@ -747,6 +829,12 @@ td:nth-child(2) {
   padding: 10px;
   border-radius: 8px;
   line-height: 1.35;
+}
+
+.reply-editor.prominent {
+  min-height: 108px;
+  border-color: var(--blue);
+  background: var(--surface);
 }
 
 .reply-meta {
@@ -1072,6 +1160,7 @@ textarea {
   .insight-grid,
   .batch-layout,
   .settings-grid,
+  .reply-review-card,
   .action-list.compact {
     grid-template-columns: 1fr;
   }

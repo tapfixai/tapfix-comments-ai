@@ -435,6 +435,7 @@ function Comments() {
     return matchesQueue && haystack.includes(query.trim().toLowerCase());
   });
   const queueCounts = Object.fromEntries(queueTabs.map((tab) => [tab.id, items.filter(tab.predicate).length]));
+  const editableReplyItems = filteredItems.filter((item) => isPending(item) && item.action === "reply");
 
   function toggleSelected(itemId) {
     setSelectedIds((current) => (
@@ -509,6 +510,88 @@ function Comments() {
         </p>
       )}
       {error && <p className="error-text">{error}</p>}
+      {editableReplyItems.length > 0 && (
+        <section className="reply-workspace panel">
+          <div className="reply-workspace-head">
+            <div>
+              <h2>Reply workspace</h2>
+              <p className="field-note">Generated replies are editable. Publish uses the exact text in the editor.</p>
+            </div>
+            <span>{editableReplyItems.length} ready to review</span>
+          </div>
+          <div className="reply-card-grid">
+            {editableReplyItems.map((item) => {
+              const manualStatus = rowStatuses[item.id];
+              const currentStatus = manualStatus?.status || getItemStatus(item);
+              const isWorking = currentStatus === "working";
+              const replyValue = editedReplies[item.id] ?? item.reply ?? "";
+              const selected = selectedIds.includes(item.id);
+
+              return (
+                <article className="reply-review-card" key={`reply-workspace-${item.id}`}>
+                  <div className="reply-card-comment">
+                    <label className="card-select">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleSelected(item.id)}
+                        aria-label={`Select ${item.id}`}
+                      />
+                      Select
+                    </label>
+                    <strong>{item.comment}</strong>
+                    <span>{item.authorName || "Viewer"}</span>
+                    <div className="decision-line">
+                      <LanguageCell language={item.detectedLanguage || item.language} confidence={item.languageConfidence || item.confidence} />
+                      <Badge value={item.smartCategory || item.category} />
+                    </div>
+                  </div>
+                  <div className="reply-card-editor">
+                    <div className="reply-label-row">
+                      <span>Generated reply</span>
+                      <span>{replyValue.length}/120</span>
+                    </div>
+                    <textarea
+                      className="reply-editor prominent"
+                      value={replyValue}
+                      onChange={(event) => setEditedReplies((current) => ({ ...current, [item.id]: event.target.value }))}
+                      placeholder="Edit the reply before publishing"
+                      rows={4}
+                    />
+                    <div className="reply-card-actions">
+                      <button
+                        className="mini-action secondary"
+                        onClick={() => regenerateReply(item)}
+                        disabled={isWorking}
+                        type="button"
+                      >
+                        <Sparkles size={13} />
+                        Regenerate reply
+                      </button>
+                      <button
+                        className="mini-action publish"
+                        onClick={() => runManualAction(item, "reply")}
+                        disabled={!canRunAction(item, "reply") || isWorking}
+                        type="button"
+                      >
+                        Publish edited reply
+                      </button>
+                      <button
+                        className="mini-action"
+                        onClick={() => runManualAction(item, "skip")}
+                        disabled={!isPending(item) || isWorking}
+                        type="button"
+                      >
+                        Skip
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
       <div className={selectedIds.length > 0 ? "bulk-bar" : "bulk-bar empty"}>
         <strong>{selectedIds.length} selected</strong>
         {selectedIds.length === 0 && <span className="bulk-hint">Select comments with the checkboxes to use bulk actions.</span>}
