@@ -75,14 +75,14 @@ server.get("/", async () => ({
   health: `${process.env.PUBLIC_API_URL || `http://127.0.0.1:${port}`}/health`,
 }));
 
-server.get("/api/auth/status", async () => {
+server.get("/api/auth/status", async (request) => {
   const connectedUser = await getConnectedUser();
   return {
     googleConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     connected: Boolean(connectedUser),
     user: connectedUser,
-    authUrl: `${getPublicApiUrl()}/auth/google`,
-    redirectUri: getGoogleRedirectUri(),
+    authUrl: `${getPublicApiUrl(request)}/auth/google`,
+    redirectUri: getGoogleRedirectUri(request),
   };
 });
 
@@ -93,7 +93,7 @@ server.get("/auth/google", async (request, reply) => {
 
   const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   authUrl.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID);
-  authUrl.searchParams.set("redirect_uri", getGoogleRedirectUri());
+  authUrl.searchParams.set("redirect_uri", getGoogleRedirectUri(request));
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("scope", googleScopes.join(" "));
   authUrl.searchParams.set("access_type", "offline");
@@ -117,7 +117,7 @@ server.get("/auth/google/callback", async (request, reply) => {
         code,
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: getGoogleRedirectUri(),
+        redirect_uri: getGoogleRedirectUri(request),
         grant_type: "authorization_code",
       }),
     });
@@ -355,7 +355,18 @@ function addLog(action, message) {
   void persistLog(log);
 }
 
-function getPublicApiUrl() {
+function getPublicApiUrl(request) {
+  if (process.env.GOOGLE_REDIRECT_URI) {
+    return new URL(process.env.GOOGLE_REDIRECT_URI).origin;
+  }
+
+  const forwardedHost = request?.headers?.["x-forwarded-host"];
+  const hostHeader = forwardedHost || request?.headers?.host;
+  if (hostHeader) {
+    const proto = request?.headers?.["x-forwarded-proto"] || (hostHeader.includes("127.0.0.1") ? "http" : "https");
+    return `${proto}://${hostHeader}`;
+  }
+
   return process.env.PUBLIC_API_URL || `http://127.0.0.1:${port}`;
 }
 
@@ -363,8 +374,8 @@ function getPanelUrl() {
   return process.env.WEB_ORIGIN || "http://127.0.0.1:5173";
 }
 
-function getGoogleRedirectUri() {
-  return process.env.GOOGLE_REDIRECT_URI || `${getPublicApiUrl()}/auth/google/callback`;
+function getGoogleRedirectUri(request) {
+  return process.env.GOOGLE_REDIRECT_URI || `${getPublicApiUrl(request)}/auth/google/callback`;
 }
 
 async function fetchGoogleProfile(accessToken) {
