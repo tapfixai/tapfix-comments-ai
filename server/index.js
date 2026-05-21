@@ -220,7 +220,7 @@ server.post("/api/comments/analyze", async (request, reply) => {
     return reply.code(400).send({ error: "invalid_comment", details: parsed.error.flatten() });
   }
 
-  const result = analyzeComment(parsed.data.text);
+  const result = await analyzeCommentWithAi(parsed.data);
   addLog("analyze", `${parsed.data.id}: ${result.action} (${result.category}, ${result.detectedLanguage})`);
   return result;
 });
@@ -305,7 +305,7 @@ server.post("/api/pipeline/process-comment", async (request, reply) => {
     return reply.code(400).send({ error: "invalid_comment", details: parsed.error.flatten() });
   }
 
-  const analysis = analyzeComment(parsed.data.text);
+  const analysis = await analyzeCommentWithAi(parsed.data);
   if (analysis.action === "review") {
     addLog("review", `Would send ${parsed.data.id} to review: ${analysis.category}`);
     return {
@@ -387,13 +387,15 @@ function addLog(action, message) {
 
 async function createDryRun(comments, meta = {}) {
   const usedReplies = new Set();
-  const results = comments.map((comment) => {
-    const analysis = analyzeComment(comment.text);
+  const results = [];
+
+  for (const comment of comments) {
+    const analysis = await analyzeCommentWithAi(comment);
     const reply = analysis.action === "reply"
       ? makeReplyUnique(analysis.reply, usedReplies, analysis.detectedLanguage)
       : analysis.reply;
 
-    return {
+    results.push({
       id: comment.id,
       videoId: comment.videoId,
       comment: comment.text,
@@ -404,8 +406,9 @@ async function createDryRun(comments, meta = {}) {
       replyLanguage: analysis.replyLanguage,
       languageConfidence: analysis.languageConfidence,
       reply,
-    };
-  });
+      replySource: analysis.replySource,
+    });
+  }
 
   const run = {
     id: crypto.randomUUID(),
@@ -425,6 +428,131 @@ async function createDryRun(comments, meta = {}) {
 
   await persistBatchRun(run);
   return run;
+}
+
+async function analyzeCommentWithAi(comment) {
+  const analysis = analyzeComment(comment.text);
+  if (analysis.action !== "reply" || !process.env.OPENAI_API_KEY) {
+    return {
+      ...analysis,
+      replySource: "rules",
+    };
+  }
+
+  try {
+    const aiReply = await generateOpenAIReply(comment, analysis);
+    const cleanedReply = cleanAiReply(aiReply);
+
+    if (cleanedReply === "DELETE") {
+      return {
+        ...analysis,
+        action: "delete",
+        category: "ai_delete",
+        replyLanguage: null,
+        reply: "DELETE",
+        replySource: "openai",
+      };
+    }
+
+    const replySafety = validateReply(cleanedReply, settings.maxReplyLength);
+    if (!replySafety.safe) {
+      addLog("ai_reply_rejected", `${comment.id}: ${replySafety.reason}`);
+      return {
+        ...analysis,
+        action: "review",
+        category: `ai_reply_${replySafety.reason}`,
+        replyLanguage: null,
+        reply: "REVIEW",
+        replySource: "openai",
+      };
+    }
+
+    return {
+      ...analysis,
+      reply: cleanedReply,
+      replySource: "openai",
+    };
+  } catch (error) {
+    addLog("openai_error", `${comment.id}: ${error.message || "OpenAI reply failed"}`);
+    return {
+      ...analysis,
+      replySource: "rules_fallback",
+    };
+  }
+}
+
+async function generateOpenAIReply(comment, analysis) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MODEL || "gpt-5.2",
+      instructions: [
+        "You are replying to comments on a YouTube ASMR channel.",
+        "Write a short, warm, natural reply in the same language as the viewer comment.",
+        "Do not sound like a bot. Do not include links. Do not sell anything.",
+        `Keep it under ${settings.maxReplyLength} characters.`,
+        `Use 0-${settings.maxEmoji} emoji maximum.`,
+        "If the comment is negative, sexual, spammy, aggressive, political, duplicated, contains links, unclear, or unsafe, return exactly DELETE.",
+        "Return only the reply text or DELETE. No quotes, no explanation.",
+      ].join("\n"),
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                `Viewer comment: ${comment.text}`,
+                `Detected language: ${analysis.detectedLanguage}`,
+                `Safety category: ${analysis.category}`,
+              ].join("\n"),
+            },
+          ],
+        },
+      ],
+      max_output_tokens: 80,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error?.message || `openai_request_failed_${response.status}`);
+  }
+
+  const outputText = extractOpenAIText(payload);
+  if (!outputText) {
+    throw new Error("openai_empty_reply");
+  }
+  return outputText;
+}
+
+function extractOpenAIText(payload) {
+  if (typeof payload.output_text === "string") {
+    return payload.output_text;
+  }
+
+  return (payload.output || [])
+    .flatMap((item) => item.content || [])
+    .map((content) => content.text || "")
+    .join("")
+    .trim();
+}
+
+function cleanAiReply(reply) {
+  const cleaned = String(reply || "")
+    .trim()
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .trim();
+
+  if (/^delete$/i.test(cleaned)) {
+    return "DELETE";
+  }
+
+  return cleaned.replace(/\s+/g, " ");
 }
 
 function makeReplyUnique(reply, usedReplies, language) {
