@@ -306,6 +306,13 @@ h2 {
   min-width: 0;
 }
 
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .toggle-row,
 .status-row {
   display: flex;

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
@@ -96,7 +96,7 @@ const comments = [
   },
 ];
 
-const logs = [
+const demoLogs = [
   { type: "reply", message: "Published AI reply to c_101", time: "09:13", status: "ok" },
   { type: "delete", message: "Deleted c_102: link / scam", time: "09:09", status: "ok" },
   { type: "like", message: "Comment like API returned not_supported", time: "09:03", status: "warning" },
@@ -131,6 +131,31 @@ function App() {
   const [autoLike, setAutoLike] = useState(false);
   const [emoji, setEmoji] = useState(true);
   const [prompt, setPrompt] = useState(defaultPrompt);
+  const [liveLogs, setLiveLogs] = useState(demoLogs);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState("");
+
+  const refreshLogs = async () => {
+    setLogsLoading(true);
+    setLogsError("");
+    try {
+      const response = await fetch(`${API_URL}/api/logs`);
+      if (!response.ok) {
+        throw new Error(`Logs request failed: ${response.status}`);
+      }
+      const data = await response.json();
+      setLiveLogs(data.map(formatApiLog));
+    } catch (error) {
+      setLogsError(error.message || "Failed to load logs");
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshLogs();
+  }, []);
+
   const stats = useMemo(() => {
     const deleted = comments.filter((item) => item.status === "deleted").length;
     const published = comments.filter((item) => item.status === "published").length;
@@ -147,13 +172,14 @@ function App() {
         setAutoDelete={setAutoDelete}
         autoLike={autoLike}
         setAutoLike={setAutoLike}
+        logs={liveLogs}
       />
     ),
     comments: <Comments />,
     batch: <BatchTest />,
     ai: <AISettings prompt={prompt} setPrompt={setPrompt} emoji={emoji} setEmoji={setEmoji} />,
     safety: <SafetySettings />,
-    logs: <Logs />,
+    logs: <Logs logs={liveLogs} loading={logsLoading} error={logsError} onRefresh={refreshLogs} />,
   };
 
   return (
@@ -212,7 +238,7 @@ function App() {
   );
 }
 
-function Dashboard({ stats, autoReply, setAutoReply, autoDelete, setAutoDelete, autoLike, setAutoLike }) {
+function Dashboard({ stats, autoReply, setAutoReply, autoDelete, setAutoDelete, autoLike, setAutoLike, logs }) {
   return (
     <div className="page-stack">
       <section className="metric-grid">
@@ -235,7 +261,7 @@ function Dashboard({ stats, autoReply, setAutoReply, autoDelete, setAutoDelete, 
         </Panel>
       </section>
       <Panel title="Latest Actions">
-        <ActionList compact />
+        <ActionList logs={logs.slice(0, 4)} compact />
       </Panel>
     </div>
   );
@@ -483,10 +509,17 @@ function SafetySettings() {
   );
 }
 
-function Logs() {
+function Logs({ logs, loading, error, onRefresh }) {
   return (
     <Panel title="Action Log">
-      <ActionList />
+      <div className="panel-toolbar">
+        <button className="filter-button" onClick={onRefresh} type="button" disabled={loading}>
+          <RefreshCw size={16} />
+          {loading ? "Loading" : "Refresh"}
+        </button>
+        {error && <span className="error-text">{error}</span>}
+      </div>
+      <ActionList logs={logs} />
     </Panel>
   );
 }
@@ -594,7 +627,7 @@ function Checklist({ items }) {
   );
 }
 
-function ActionList({ compact = false }) {
+function ActionList({ logs, compact = false }) {
   return (
     <div className={compact ? "action-list compact" : "action-list"}>
       {logs.map((log) => (
@@ -610,6 +643,19 @@ function ActionList({ compact = false }) {
       ))}
     </div>
   );
+}
+
+function formatApiLog(log) {
+  const action = log.action || "log";
+  const createdAt = log.createdAt ? new Date(log.createdAt) : null;
+  return {
+    type: action.includes("delete") ? "delete" : action.includes("like") ? "like" : action.includes("batch") || action.includes("cron") ? "quota" : "reply",
+    message: log.message || action,
+    time: createdAt && !Number.isNaN(createdAt.getTime())
+      ? createdAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : "",
+    status: action.includes("error") || action.includes("warning") ? "warning" : "ok",
+  };
 }
 
 createRoot(document.getElementById("root")).render(<App />);
