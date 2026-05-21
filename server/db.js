@@ -37,8 +37,16 @@ async function ensureDatabase() {
         replies INTEGER NOT NULL,
         reviews INTEGER NOT NULL,
         deletes INTEGER NOT NULL,
+        source TEXT,
+        channel_id TEXT,
+        channel_title TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE dry_run_batches
+        ADD COLUMN IF NOT EXISTS source TEXT,
+        ADD COLUMN IF NOT EXISTS channel_id TEXT,
+        ADD COLUMN IF NOT EXISTS channel_title TEXT;
 
       CREATE TABLE IF NOT EXISTS dry_run_results (
         id TEXT PRIMARY KEY,
@@ -101,11 +109,11 @@ export async function persistBatchRun(run) {
     await connection.query("BEGIN");
     await connection.query(
       `
-        INSERT INTO dry_run_batches (id, total, replies, reviews, deletes, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO dry_run_batches (id, total, replies, reviews, deletes, source, channel_id, channel_title, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (id) DO NOTHING
       `,
-      [run.id, run.total, run.replies, run.reviews, run.deletes, run.createdAt],
+      [run.id, run.total, run.replies, run.reviews, run.deletes, run.source, run.channelId, run.channelTitle, run.createdAt],
     );
 
     for (const result of run.results) {
@@ -171,6 +179,9 @@ export async function listBatchRunsFromDb(limit = 20) {
           b.replies,
           b.reviews,
           b.deletes,
+          b.source,
+          b.channel_id AS "channelId",
+          b.channel_title AS "channelTitle",
           COUNT(r.id)::int AS "resultsCount"
         FROM dry_run_batches b
         LEFT JOIN dry_run_results r ON r.batch_id = b.id
@@ -196,7 +207,16 @@ export async function latestBatchRunFromDb() {
   try {
     const batchResult = await client.query(
       `
-        SELECT id, created_at AS "createdAt", total, replies, reviews, deletes
+        SELECT
+          id,
+          created_at AS "createdAt",
+          total,
+          replies,
+          reviews,
+          deletes,
+          source,
+          channel_id AS "channelId",
+          channel_title AS "channelTitle"
         FROM dry_run_batches
         ORDER BY created_at DESC
         LIMIT 1
@@ -236,6 +256,9 @@ export async function latestBatchRunFromDb() {
       replies: batch.replies,
       reviews: batch.reviews,
       deletes: batch.deletes,
+      source: batch.source,
+      channelId: batch.channelId,
+      channelTitle: batch.channelTitle,
       results: resultsResult.rows.map((result) => ({
         id: result.externalCommentId || result.id,
         videoId: result.videoId,
