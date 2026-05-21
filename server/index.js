@@ -502,7 +502,7 @@ async function rememberProcessedComment({ commentId, videoId, action, status, re
 async function filterUnprocessedComments(comments) {
   const dbProcessedIds = await listProcessedCommentIds();
   const processedIds = new Set(dbProcessedIds || processedCommentIds);
-  return comments.filter((comment) => !processedIds.has(comment.id));
+  return comments.filter((comment) => !processedIds.has(comment.id) && !comment.replyCount);
 }
 
 async function createDryRun(comments, meta = {}) {
@@ -928,6 +928,7 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }
           videoId: item.snippet?.videoId || "unknown-video",
           text,
           authorName: snippet?.authorDisplayName || "Viewer",
+          replyCount: Number(item.snippet?.totalReplyCount || 0),
         };
       })
       .filter((comment) => comment.id && comment.text);
