@@ -139,58 +139,114 @@ function generateWarmReply(comment, languageCode) {
   const text = comment.toLowerCase();
   const replyBank = {
     en: {
-      sleep: "So glad it helped you relax. Sleep well tonight.",
-      sound: "Thank you, I'm glad the sounds felt good.",
-      reaction: "Thank you so much ❤️",
-      fallback: "Thank you for watching, I'm really glad you enjoyed it.",
+      sleep: [
+        "So glad it helped you relax. Sleep well tonight.",
+        "Happy it helped you unwind. Rest well.",
+        "That means a lot. Hope you sleep peacefully.",
+      ],
+      sound: [
+        "Thank you, I'm glad the sounds felt good.",
+        "So happy you liked the sounds.",
+        "Glad the audio felt relaxing for you.",
+      ],
+      reaction: [
+        "Thank you so much ❤️",
+        "So sweet, thank you ❤️",
+        "Really appreciate it ❤️",
+      ],
+      fallback: [
+        "Thank you for watching, I'm really glad you enjoyed it.",
+        "So glad you enjoyed it, thank you for being here.",
+        "Thanks for watching, happy you liked it.",
+        "I really appreciate you watching.",
+        "Glad you enjoyed this one.",
+      ],
     },
     es: {
-      sleep: "Me alegra mucho que te haya ayudado a relajarte.",
-      sound: "Gracias, me alegra que los sonidos se sientan bien.",
-      reaction: "Muchas gracias ❤️",
-      fallback: "Gracias por mirar, me alegra mucho que te haya gustado.",
+      sleep: [
+        "Me alegra mucho que te haya ayudado a relajarte.",
+        "Que bueno que te ayudo a descansar.",
+      ],
+      sound: [
+        "Gracias, me alegra que los sonidos se sientan bien.",
+        "Me alegra que te hayan gustado los sonidos.",
+      ],
+      reaction: ["Muchas gracias ❤️", "Gracias de corazon ❤️", "Que lindo, gracias ❤️"],
+      fallback: [
+        "Gracias por mirar, me alegra mucho que te haya gustado.",
+        "Muchas gracias por verlo, me alegra que te guste.",
+        "Gracias, me alegra que hayas disfrutado el video.",
+      ],
     },
     ru: {
-      sleep: "Рада, что видео помогло расслабиться. Спокойной ночи.",
-      sound: "Спасибо, рада, что звук тебе понравился.",
-      reaction: "Спасибо большое ❤️",
-      fallback: "Спасибо за просмотр, очень рада, что тебе понравилось.",
+      sleep: [
+        "Рада, что видео помогло расслабиться. Спокойной ночи.",
+        "Очень рада, что помогло отдохнуть.",
+      ],
+      sound: ["Спасибо, рада, что звук тебе понравился.", "Рада, что звуки зашли."],
+      reaction: ["Спасибо большое ❤️", "Очень приятно, спасибо ❤️", "Спасибо, мне очень приятно ❤️"],
+      fallback: [
+        "Спасибо за просмотр, очень рада, что тебе понравилось.",
+        "Спасибо, рада, что тебе понравилось.",
+        "Очень приятно, спасибо за просмотр.",
+      ],
     },
     fr: {
-      sleep: "Ravi que la video t'ait aide a te detendre.",
-      sound: "Merci, content que les sons soient agreables.",
-      reaction: "Merci beaucoup ❤️",
-      fallback: "Merci d'avoir regarde, je suis content que ca t'ait plu.",
+      sleep: ["Ravi que la video t'ait aide a te detendre.", "Heureux que ca t'ait aide a te relaxer."],
+      sound: ["Merci, content que les sons soient agreables.", "Merci, ravi que les sons te plaisent."],
+      reaction: ["Merci beaucoup ❤️", "C'est adorable, merci ❤️", "Merci, ca me touche ❤️"],
+      fallback: [
+        "Merci d'avoir regarde, je suis content que ca t'ait plu.",
+        "Merci beaucoup, ravi que tu aies aime.",
+        "Merci d'etre la, ca me fait plaisir.",
+      ],
     },
     de: {
-      sleep: "Freut mich, dass es dir beim Entspannen geholfen hat.",
-      sound: "Danke, schon dass sich die Sounds gut anfuhlen.",
-      reaction: "Vielen Dank ❤️",
-      fallback: "Danke fürs Zuschauen, freut mich sehr, dass es dir gefallt.",
+      sleep: ["Freut mich, dass es dir beim Entspannen geholfen hat.", "Schon, dass es dir beim Abschalten hilft."],
+      sound: ["Danke, schon dass sich die Sounds gut anfuhlen.", "Freut mich, dass dir die Sounds gefallen."],
+      reaction: ["Vielen Dank ❤️", "Das ist lieb, danke ❤️", "Danke dir sehr ❤️"],
+      fallback: [
+        "Danke fürs Zuschauen, freut mich sehr, dass es dir gefallt.",
+        "Danke, freut mich dass du es magst.",
+        "Vielen Dank fürs Zuschauen.",
+      ],
     },
     pt: {
-      sleep: "Fico feliz que tenha ajudado voce a relaxar.",
-      sound: "Obrigada, fico feliz que os sons tenham ficado bons.",
-      reaction: "Muito obrigada ❤️",
-      fallback: "Obrigada por assistir, fico feliz que tenha gostado.",
+      sleep: ["Fico feliz que tenha ajudado voce a relaxar.", "Que bom que ajudou voce a descansar."],
+      sound: ["Obrigada, fico feliz que os sons tenham ficado bons.", "Fico feliz que voce gostou dos sons."],
+      reaction: ["Muito obrigada ❤️", "Que carinho, obrigada ❤️", "Obrigada de coracao ❤️"],
+      fallback: [
+        "Obrigada por assistir, fico feliz que tenha gostado.",
+        "Muito obrigada por assistir.",
+        "Fico feliz que voce tenha gostado.",
+      ],
     },
     tr: {
-      sleep: "Rahatlamana yardimci olmasina cok sevindim.",
-      sound: "Tesekkur ederim, sesleri begenmene sevindim.",
-      reaction: "Cok tesekkur ederim ❤️",
-      fallback: "Izledigin icin tesekkur ederim, begenmene sevindim.",
+      sleep: ["Rahatlamana yardimci olmasina cok sevindim.", "Dinlenmene iyi gelmesine sevindim."],
+      sound: ["Tesekkur ederim, sesleri begenmene sevindim.", "Sesleri begenmene cok sevindim."],
+      reaction: ["Cok tesekkur ederim ❤️", "Cok naziksin, tesekkurler ❤️", "Cok mutlu oldum, tesekkurler ❤️"],
+      fallback: [
+        "Izledigin icin tesekkur ederim, begenmene sevindim.",
+        "Cok tesekkurler, begenmene sevindim.",
+        "Izledigin icin cok tesekkur ederim.",
+      ],
     },
   };
 
   const replies = replyBank[languageCode] || replyBank.en;
   if (positiveEmojiPattern.test(comment.trim())) {
-    return replies.reaction;
+    return pickReply(replies.reaction, comment);
   }
   if (text.includes("sleep") || text.includes("relax") || text.includes("calming")) {
-    return replies.sleep;
+    return pickReply(replies.sleep, comment);
   }
   if (text.includes("sound") || text.includes("sounds") || text.includes("mic") || text.includes("sonido") || text.includes("microfono")) {
-    return replies.sound;
+    return pickReply(replies.sound, comment);
   }
-  return replies.fallback;
+  return pickReply(replies.fallback, comment);
+}
+
+function pickReply(options, seedText) {
+  const seed = [...seedText].reduce((sum, char) => sum + char.codePointAt(0), 0);
+  return options[seed % options.length];
 }

@@ -386,8 +386,13 @@ function addLog(action, message) {
 }
 
 async function createDryRun(comments, meta = {}) {
+  const usedReplies = new Set();
   const results = comments.map((comment) => {
     const analysis = analyzeComment(comment.text);
+    const reply = analysis.action === "reply"
+      ? makeReplyUnique(analysis.reply, usedReplies, analysis.detectedLanguage)
+      : analysis.reply;
+
     return {
       id: comment.id,
       videoId: comment.videoId,
@@ -398,7 +403,7 @@ async function createDryRun(comments, meta = {}) {
       detectedLanguage: analysis.detectedLanguage,
       replyLanguage: analysis.replyLanguage,
       languageConfidence: analysis.languageConfidence,
-      reply: analysis.reply,
+      reply,
     };
   });
 
@@ -420,6 +425,50 @@ async function createDryRun(comments, meta = {}) {
 
   await persistBatchRun(run);
   return run;
+}
+
+function makeReplyUnique(reply, usedReplies, language) {
+  if (!usedReplies.has(reply)) {
+    usedReplies.add(reply);
+    return reply;
+  }
+
+  const alternatives = uniqueReplyAlternatives(language);
+  const available = alternatives.find((candidate) => !usedReplies.has(candidate));
+  if (available) {
+    usedReplies.add(available);
+    return available;
+  }
+
+  usedReplies.add(reply);
+  return reply;
+}
+
+function uniqueReplyAlternatives(language) {
+  if (language === "Portuguese") {
+    return [
+      "Muito obrigada por assistir.",
+      "Fico feliz que voce tenha gostado.",
+      "Obrigada pelo carinho ❤️",
+    ];
+  }
+
+  if (language === "Turkish") {
+    return [
+      "Cok tesekkurler, begenmene sevindim.",
+      "Izledigin icin cok tesekkur ederim.",
+      "Cok mutlu oldum, tesekkurler ❤️",
+    ];
+  }
+
+  return [
+    "Thanks for watching, happy you liked it.",
+    "So glad you enjoyed it, thank you for being here.",
+    "I really appreciate you watching.",
+    "Glad you enjoyed this one.",
+    "Thank you so much ❤️",
+    "Really appreciate it ❤️",
+  ];
 }
 
 function getPublicApiUrl(request) {
