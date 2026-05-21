@@ -491,10 +491,6 @@ dm me for collab`);
       return;
     }
 
-    if (action === "delete" && !window.confirm("Delete this YouTube comment?")) {
-      return;
-    }
-
     setError("");
     setCommentStatuses((current) => ({
       ...current,
