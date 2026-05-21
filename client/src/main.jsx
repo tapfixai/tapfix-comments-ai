@@ -361,6 +361,7 @@ dm me for collab`);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState("");
   const [lastRunAt, setLastRunAt] = useState("");
+  const [lastSource, setLastSource] = useState("Manual");
 
   async function runBatch() {
     const commentsToAnalyze = input
@@ -388,6 +389,7 @@ dm me for collab`);
       }
       setResults(payload.results);
       setLastRunAt(payload.createdAt || "");
+      setLastSource("Manual");
       window.localStorage.setItem("tapfix:lastBatchRun", JSON.stringify(payload));
     } catch (batchError) {
       setError(batchError.message);
@@ -410,13 +412,39 @@ dm me for collab`);
         const cachedRun = JSON.parse(cached);
         setResults(cachedRun.results || []);
         setLastRunAt(cachedRun.createdAt || "");
+        setLastSource(cachedRun.source === "youtube" ? "YouTube" : "Manual");
         return;
       }
       setResults(payload.results);
       setLastRunAt(payload.createdAt || "");
+      setLastSource(payload.source === "youtube" ? "YouTube" : "Manual");
       window.localStorage.setItem("tapfix:lastBatchRun", JSON.stringify(payload));
     } catch (loadError) {
       setError(loadError.message);
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  async function runYouTubeDryRun() {
+    setIsRunning(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ maxResults: 25 }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || "YouTube dry run failed");
+      }
+      setResults(payload.results || []);
+      setLastRunAt(payload.createdAt || "");
+      setLastSource("YouTube");
+      window.localStorage.setItem("tapfix:lastBatchRun", JSON.stringify(payload));
+    } catch (youtubeError) {
+      setError(youtubeError.message);
     } finally {
       setIsRunning(false);
     }
@@ -444,6 +472,10 @@ dm me for collab`);
             <button className="filter-button" onClick={loadLatestRun} disabled={isRunning} type="button">
               Load latest
             </button>
+            <button className="filter-button" onClick={runYouTubeDryRun} disabled={isRunning} type="button">
+              <Video size={18} />
+              YouTube dry run
+            </button>
             {error && <span className="error-text">{error}</span>}
           </div>
         </Panel>
@@ -453,6 +485,7 @@ dm me for collab`);
           <StatusRow label="Reviews" value={reviewCount} />
           <StatusRow label="Deletes" value={deleteCount} />
           <StatusRow label="Last run" value={lastRunAt ? new Date(lastRunAt).toLocaleString() : "Not loaded"} />
+          <StatusRow label="Source" value={lastSource} />
           <StatusRow label="Mode" value="Dry run only" />
         </Panel>
       </section>
@@ -465,6 +498,7 @@ dm me for collab`);
                 <th>Action</th>
                 <th>Language</th>
                 <th>Category</th>
+                <th>Video</th>
                 <th>AI Reply</th>
               </tr>
             </thead>
@@ -475,6 +509,7 @@ dm me for collab`);
                   <td><StatusPill status={item.action} /></td>
                   <td><LanguageCell language={item.detectedLanguage} confidence={item.languageConfidence} /></td>
                   <td><Badge value={item.category} /></td>
+                  <td>{item.videoId || "manual-test"}</td>
                   <td>{item.reply}</td>
                 </tr>
               ))}

@@ -8,10 +8,12 @@ import { analyzeComment, validateReply } from "./safety.js";
 import {
   latestBatchRunFromDb,
   getConnectedUser,
+  getConnectedYouTubeCredentials,
   listBatchRunsFromDb,
   listLogsFromDb,
   persistBatchRun,
   persistLog,
+  updateConnectedUserTokens,
   upsertConnectedUser,
 } from "./db.js";
 
@@ -61,6 +63,10 @@ const commentSchema = z.object({
 const batchSchema = z.object({
   comments: z.array(commentSchema).min(1).max(500),
 });
+
+const youtubeDryRunSchema = z.object({
+  maxResults: z.number().int().min(1).max(100).optional(),
+}).optional();
 
 server.get("/health", async () => ({
   status: "ok",
@@ -225,39 +231,63 @@ server.post("/api/comments/analyze-batch", async (request, reply) => {
     return reply.code(400).send({ error: "invalid_batch", details: parsed.error.flatten() });
   }
 
-  const results = parsed.data.comments.map((comment) => {
-    const analysis = analyzeComment(comment.text);
-    return {
-      id: comment.id,
-      comment: comment.text,
-      authorName: comment.authorName,
-      action: analysis.action,
-      category: analysis.category,
-      detectedLanguage: analysis.detectedLanguage,
-      replyLanguage: analysis.replyLanguage,
-      languageConfidence: analysis.languageConfidence,
-      reply: analysis.reply,
-    };
-  });
+  const run = await createDryRun(parsed.data.comments);
+  addLog("batch_analyze", `Analyzed ${run.total} comments: ${run.replies} replies, ${run.reviews} reviews, ${run.deletes} deletes`);
+  return run;
+});
 
-  const run = {
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    total: results.length,
-    replies: results.filter((item) => item.action === "reply").length,
-    reviews: results.filter((item) => item.action === "review").length,
-    deletes: results.filter((item) => item.action === "delete").length,
-    results,
-  };
-
-  batchRuns.push(run);
-  if (batchRuns.length > 20) {
-    batchRuns.shift();
+server.post("/api/youtube/comments/dry-run", async (request, reply) => {
+  const parsed = youtubeDryRunSchema.safeParse(request.body || {});
+  if (!parsed.success) {
+    return reply.code(400).send({ error: "invalid_youtube_dry_run", details: parsed.error.flatten() });
   }
 
-  await persistBatchRun(run);
-  addLog("batch_analyze", `Analyzed ${results.length} comments: ${run.replies} replies, ${run.reviews} reviews, ${run.deletes} deletes`);
-  return run;
+  const connectedUser = await getConnectedYouTubeCredentials();
+  if (!connectedUser) {
+    return reply.code(409).send({ error: "youtube_not_connected", message: "Connect YouTube first" });
+  }
+
+  try {
+    const accessToken = await getValidYouTubeAccessToken(connectedUser);
+    const comments = await fetchLatestYouTubeComments({
+      accessToken,
+      channelId: connectedUser.youtubeChannelId,
+      maxResults: parsed.data?.maxResults || 25,
+    });
+
+    if (!comments.length) {
+      addLog("youtube_dry_run", `No recent YouTube comments found for ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId}`);
+      return {
+        id: crypto.randomUUID(),
+        source: "youtube",
+        channelTitle: connectedUser.youtubeChannelTitle,
+        channelId: connectedUser.youtubeChannelId,
+        createdAt: new Date().toISOString(),
+        total: 0,
+        replies: 0,
+        reviews: 0,
+        deletes: 0,
+        results: [],
+      };
+    }
+
+    const run = await createDryRun(comments, {
+      source: "youtube",
+      channelId: connectedUser.youtubeChannelId,
+      channelTitle: connectedUser.youtubeChannelTitle,
+    });
+
+    addLog("youtube_dry_run", `Analyzed ${run.total} YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId}`);
+    return run;
+  } catch (error) {
+    const statusCode = Number(error.statusCode || 502);
+    addLog("youtube_dry_run_error", error.message || "YouTube dry-run failed");
+    return reply.code(statusCode >= 400 && statusCode < 600 ? statusCode : 502).send({
+      error: "youtube_dry_run_failed",
+      message: error.message || "YouTube dry-run failed",
+      details: error.details,
+    });
+  }
 });
 
 server.post("/api/dry-run/comments", async (request, reply) => {
@@ -355,6 +385,43 @@ function addLog(action, message) {
   void persistLog(log);
 }
 
+async function createDryRun(comments, meta = {}) {
+  const results = comments.map((comment) => {
+    const analysis = analyzeComment(comment.text);
+    return {
+      id: comment.id,
+      videoId: comment.videoId,
+      comment: comment.text,
+      authorName: comment.authorName || "Viewer",
+      action: analysis.action,
+      category: analysis.category,
+      detectedLanguage: analysis.detectedLanguage,
+      replyLanguage: analysis.replyLanguage,
+      languageConfidence: analysis.languageConfidence,
+      reply: analysis.reply,
+    };
+  });
+
+  const run = {
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    total: results.length,
+    replies: results.filter((item) => item.action === "reply").length,
+    reviews: results.filter((item) => item.action === "review").length,
+    deletes: results.filter((item) => item.action === "delete").length,
+    results,
+    ...meta,
+  };
+
+  batchRuns.push(run);
+  if (batchRuns.length > 20) {
+    batchRuns.shift();
+  }
+
+  await persistBatchRun(run);
+  return run;
+}
+
 function getPublicApiUrl(request) {
   if (process.env.GOOGLE_REDIRECT_URI) {
     return new URL(process.env.GOOGLE_REDIRECT_URI).origin;
@@ -404,6 +471,84 @@ async function fetchYouTubeChannel(accessToken) {
     id: channel.id,
     title: channel.snippet?.title || channel.id,
   };
+}
+
+async function getValidYouTubeAccessToken(user) {
+  const expiresAt = user.tokenExpiry ? new Date(user.tokenExpiry).getTime() : 0;
+  const shouldRefresh = !user.accessToken || !expiresAt || expiresAt - Date.now() < 2 * 60 * 1000;
+
+  if (!shouldRefresh) {
+    return user.accessToken;
+  }
+
+  if (!user.refreshToken) {
+    throw new Error("missing_youtube_refresh_token");
+  }
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      refresh_token: user.refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error_description || payload.error || `google_token_refresh_failed_${response.status}`);
+    error.statusCode = 401;
+    error.details = payload;
+    throw error;
+  }
+
+  const tokenExpiry = new Date(Date.now() + Number(payload.expires_in || 3600) * 1000).toISOString();
+  await updateConnectedUserTokens(user.id, {
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token,
+    tokenExpiry,
+  });
+
+  return payload.access_token;
+}
+
+async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/commentThreads");
+  url.searchParams.set("part", "snippet");
+  url.searchParams.set("allThreadsRelatedToChannelId", channelId);
+  url.searchParams.set("maxResults", String(maxResults));
+  url.searchParams.set("order", "time");
+  url.searchParams.set("textFormat", "plainText");
+
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const errorMessage = payload.error?.message || `youtube_comments_request_failed_${response.status}`;
+    const error = new Error(errorMessage);
+    error.statusCode = response.status;
+    error.details = payload;
+    throw error;
+  }
+
+  return (payload.items || [])
+    .map((item) => {
+      const topLevelComment = item.snippet?.topLevelComment;
+      const snippet = topLevelComment?.snippet;
+      const text = snippet?.textOriginal || snippet?.textDisplay || "";
+
+      return {
+        id: topLevelComment?.id || item.id,
+        videoId: item.snippet?.videoId || "unknown-video",
+        text,
+        authorName: snippet?.authorDisplayName || "Viewer",
+      };
+    })
+    .filter((comment) => comment.id && comment.text);
 }
 
 server.listen({ port, host });

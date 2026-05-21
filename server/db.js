@@ -44,6 +44,7 @@ async function ensureDatabase() {
         id TEXT PRIMARY KEY,
         batch_id TEXT NOT NULL REFERENCES dry_run_batches(id) ON DELETE CASCADE,
         external_comment_id TEXT,
+        video_id TEXT,
         author_name TEXT,
         comment_text TEXT NOT NULL,
         action TEXT NOT NULL,
@@ -57,6 +58,9 @@ async function ensureDatabase() {
 
       CREATE INDEX IF NOT EXISTS dry_run_results_batch_id_idx
         ON dry_run_results(batch_id);
+
+      ALTER TABLE dry_run_results
+        ADD COLUMN IF NOT EXISTS video_id TEXT;
 
       CREATE TABLE IF NOT EXISTS logs (
         id TEXT PRIMARY KEY,
@@ -111,6 +115,7 @@ export async function persistBatchRun(run) {
             id,
             batch_id,
             external_comment_id,
+            video_id,
             author_name,
             comment_text,
             action,
@@ -120,12 +125,13 @@ export async function persistBatchRun(run) {
             language_confidence,
             ai_reply
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         `,
         [
           crypto.randomUUID(),
           run.id,
           result.id,
+          result.videoId,
           result.authorName,
           result.comment,
           result.action,
@@ -207,6 +213,7 @@ export async function latestBatchRunFromDb() {
         SELECT
           id,
           external_comment_id AS "externalCommentId",
+          video_id AS "videoId",
           author_name AS "authorName",
           comment_text AS "commentText",
           action,
@@ -231,6 +238,7 @@ export async function latestBatchRunFromDb() {
       deletes: batch.deletes,
       results: resultsResult.rows.map((result) => ({
         id: result.externalCommentId || result.id,
+        videoId: result.videoId,
         comment: result.commentText,
         authorName: result.authorName || "Viewer",
         action: result.action,
@@ -369,6 +377,69 @@ export async function getConnectedUser() {
     };
   } catch (error) {
     console.error("Failed to load connected YouTube user", error);
+    return null;
+  }
+}
+
+export async function getConnectedYouTubeCredentials() {
+  const client = await ensureDatabase();
+  if (!client) {
+    return null;
+  }
+
+  try {
+    const { rows } = await client.query(`
+      SELECT
+        id,
+        google_email AS "googleEmail",
+        youtube_channel_id AS "youtubeChannelId",
+        youtube_channel_title AS "youtubeChannelTitle",
+        access_token AS "accessToken",
+        refresh_token AS "refreshToken",
+        token_expiry AS "tokenExpiry"
+      FROM users
+      WHERE refresh_token IS NOT NULL
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `);
+    const user = rows[0];
+    if (!user) {
+      return null;
+    }
+
+    return {
+      ...user,
+      tokenExpiry: user.tokenExpiry?.toISOString?.() || user.tokenExpiry,
+    };
+  } catch (error) {
+    console.error("Failed to load connected YouTube credentials", error);
+    return null;
+  }
+}
+
+export async function updateConnectedUserTokens(userId, tokens) {
+  const client = await ensureDatabase();
+  if (!client) {
+    return null;
+  }
+
+  try {
+    const { rows } = await client.query(
+      `
+        UPDATE users
+        SET
+          access_token = COALESCE($2, access_token),
+          refresh_token = COALESCE($3, refresh_token),
+          token_expiry = COALESCE($4, token_expiry),
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING id
+      `,
+      [userId, tokens.accessToken, tokens.refreshToken, tokens.tokenExpiry],
+    );
+    return rows[0] || null;
+  } catch (error) {
+    console.error("Failed to update YouTube tokens", error);
     return null;
   }
 }
