@@ -217,13 +217,19 @@ export async function listBatchRunsFromDb(limit = 20) {
   }
 }
 
-export async function latestBatchRunFromDb() {
+export async function latestBatchRunFromDb(source = null) {
   const client = await ensureDatabase();
   if (!client) {
     return null;
   }
 
   try {
+    const params = [];
+    const sourceFilter = source ? "WHERE source = $1" : "";
+    if (source) {
+      params.push(source);
+    }
+
     const batchResult = await client.query(
       `
         SELECT
@@ -237,9 +243,11 @@ export async function latestBatchRunFromDb() {
           channel_id AS "channelId",
           channel_title AS "channelTitle"
         FROM dry_run_batches
+        ${sourceFilter}
         ORDER BY created_at DESC
         LIMIT 1
       `,
+      params,
     );
 
     const batch = batchResult.rows[0];

@@ -280,10 +280,10 @@ function Comments() {
     setIsLoading(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/comments/batch-runs/latest`);
+      const response = await fetch(`${API_URL}/api/comments/batch-runs/latest?source=youtube`);
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error || "No saved comments yet");
+        throw new Error(payload.error === "no_batch_runs" ? "No YouTube dry run yet. Run YouTube dry run from Batch Test first." : payload.error || "No saved comments yet");
       }
       setLatestRun(payload);
       setItems(payload.results || []);
@@ -784,15 +784,26 @@ function Comments() {
 }
 
 function getItemStatus(item) {
-  return item?.status || "pending";
+  const status = String(item?.status || "pending").toLowerCase();
+  if (["published", "deleted", "skipped", "working"].includes(status)) {
+    return status;
+  }
+  return "pending";
 }
 
 function isPending(item) {
   return getItemStatus(item) === "pending";
 }
 
+function hasYouTubeTarget(item) {
+  return Boolean(item?.id && item?.videoId && item.videoId !== "manual-test" && item.videoId !== "unknown-video");
+}
+
 function canRunAction(item, action) {
   if (!isPending(item)) {
+    return false;
+  }
+  if (!hasYouTubeTarget(item)) {
     return false;
   }
   if (action === "reply") {

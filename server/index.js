@@ -218,12 +218,16 @@ server.get("/api/comments/batch-runs", async () => {
 });
 
 server.get("/api/comments/batch-runs/latest", async (request, reply) => {
-  const dbLatest = await latestBatchRunFromDb();
+  const requestedSource = request.query?.source;
+  const source = requestedSource === "youtube" || requestedSource === "manual" ? requestedSource : null;
+  const dbLatest = await latestBatchRunFromDb(source);
   if (dbLatest) {
     return dbLatest;
   }
 
-  const latest = batchRuns.at(-1);
+  const latest = source
+    ? [...batchRuns].reverse().find((run) => run.source === source)
+    : batchRuns.at(-1);
   if (!latest) {
     return reply.code(404).send({ error: "no_batch_runs" });
   }
