@@ -497,6 +497,7 @@ dm me for collab`);
           status: payload.status || (action === "reply" ? "published" : "deleted"),
           message: action === "reply" ? "Published" : "Deleted",
           url: payload.replyUrl || item.commentUrl || item.videoUrl,
+          studioUrl: payload.studioCommentsUrl || item.studioCommentsUrl,
         },
       }));
     } catch (manualError) {
@@ -511,6 +512,18 @@ dm me for collab`);
   const replyCount = results.filter((item) => item.action === "reply").length;
   const reviewCount = results.filter((item) => item.action === "review").length;
   const deleteCount = results.filter((item) => item.action === "delete").length;
+
+  async function copyCommentReference(item) {
+    const text = [
+      item.comment,
+      "",
+      `Comment ID: ${item.id}`,
+      item.videoUrl ? `Video: ${item.videoUrl}` : "",
+      item.commentUrl ? `Comment link: ${item.commentUrl}` : "",
+    ].filter(Boolean).join("\n");
+
+    await navigator.clipboard.writeText(text);
+  }
 
   return (
     <div className="page-stack">
@@ -587,6 +600,10 @@ dm me for collab`);
                         <span>{item.videoId || "manual-test"}</span>
                         {item.videoUrl && <a href={item.videoUrl} target="_blank" rel="noreferrer">Open video</a>}
                         {item.commentUrl && <a href={item.commentUrl} target="_blank" rel="noreferrer">Open comment</a>}
+                        {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target="_blank" rel="noreferrer">Open in Studio</a>}
+                        <button className="link-button" onClick={() => copyCommentReference(item)} type="button">
+                          Copy ref
+                        </button>
                       </div>
                     </td>
                     <td>{item.reply}</td>
@@ -596,6 +613,11 @@ dm me for collab`);
                         {manualStatus?.url && (
                           <a className="mini-link" href={manualStatus.url} target="_blank" rel="noreferrer">
                             View result
+                          </a>
+                        )}
+                        {manualStatus?.studioUrl && (
+                          <a className="mini-link" href={manualStatus.studioUrl} target="_blank" rel="noreferrer">
+                            Studio
                           </a>
                         )}
                         {item.action === "reply" && (

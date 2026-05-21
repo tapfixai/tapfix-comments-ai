@@ -490,7 +490,8 @@ td:nth-child(2) {
 }
 
 .link-stack a,
-.mini-link {
+.mini-link,
+.link-button {
   color: var(--blue);
   font-size: 12px;
   font-weight: 700;
@@ -498,8 +499,17 @@ td:nth-child(2) {
 }
 
 .link-stack a:hover,
-.mini-link:hover {
+.mini-link:hover,
+.link-button:hover {
   text-decoration: underline;
+}
+
+.link-button {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
 }
 
 .mini-action {
