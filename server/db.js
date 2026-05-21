@@ -1,14 +1,21 @@
 import { PrismaClient } from "@prisma/client";
 
 let prisma = null;
+let prismaDisabled = false;
 
 export function getPrisma() {
-  if (!process.env.DATABASE_URL) {
+  if (!process.env.DATABASE_URL || prismaDisabled) {
     return null;
   }
 
   if (!prisma) {
-    prisma = new PrismaClient();
+    try {
+      prisma = new PrismaClient();
+    } catch (error) {
+      prismaDisabled = true;
+      console.error("Prisma is unavailable; falling back to in-memory dry-run storage", error);
+      return null;
+    }
   }
 
   return prisma;
