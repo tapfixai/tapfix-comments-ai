@@ -454,6 +454,15 @@ async function analyzeCommentWithAi(comment) {
       };
     }
 
+    const generatedReplySafety = validateAiGeneratedReply(cleanedReply, comment.text);
+    if (!generatedReplySafety.safe) {
+      addLog("ai_reply_rejected", `${comment.id}: ${generatedReplySafety.reason}`);
+      return {
+        ...analysis,
+        replySource: "rules_fallback",
+      };
+    }
+
     const replySafety = validateReply(cleanedReply, settings.maxReplyLength);
     if (!replySafety.safe) {
       addLog("ai_reply_rejected", `${comment.id}: ${replySafety.reason}`);
@@ -494,6 +503,8 @@ async function generateOpenAIReply(comment, analysis) {
         "You are replying to comments on a YouTube ASMR channel.",
         "Write a short, warm, natural reply in the same language as the viewer comment.",
         "Do not sound like a bot. Do not include links. Do not sell anything.",
+        "Do not copy the viewer comment. Do not reply with only emoji.",
+        "For emoji-only positive comments, write a short thank-you sentence instead of echoing emoji.",
         `Keep it under ${settings.maxReplyLength} characters.`,
         `Use 0-${settings.maxEmoji} emoji maximum.`,
         "If the comment is negative, sexual, spammy, aggressive, political, duplicated, contains links, unclear, or unsafe, return exactly DELETE.",
@@ -528,6 +539,32 @@ async function generateOpenAIReply(comment, analysis) {
     throw new Error("openai_empty_reply");
   }
   return outputText;
+}
+
+function validateAiGeneratedReply(reply, commentText) {
+  const normalizedReply = normalizeForComparison(reply);
+  const normalizedComment = normalizeForComparison(commentText);
+
+  if (!normalizedReply) {
+    return { safe: false, reason: "empty_ai_reply" };
+  }
+
+  if (normalizedReply === normalizedComment) {
+    return { safe: false, reason: "copied_comment" };
+  }
+
+  if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u.test(reply.trim())) {
+    return { safe: false, reason: "emoji_only_reply" };
+  }
+
+  return { safe: true };
+}
+
+function normalizeForComparison(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 function extractOpenAIText(payload) {
