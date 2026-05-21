@@ -363,6 +363,7 @@ dm me for collab`);
   const [lastRunAt, setLastRunAt] = useState("");
   const [lastSource, setLastSource] = useState("Manual");
   const [youtubeLimit, setYoutubeLimit] = useState(50);
+  const [commentStatuses, setCommentStatuses] = useState({});
 
   async function runBatch() {
     const commentsToAnalyze = input
@@ -389,6 +390,7 @@ dm me for collab`);
         throw new Error(payload.error || "Batch analysis failed");
       }
       setResults(payload.results);
+      setCommentStatuses({});
       setLastRunAt(payload.createdAt || "");
       setLastSource("Manual");
       window.localStorage.setItem("tapfix:lastBatchRun", JSON.stringify(payload));
@@ -412,11 +414,13 @@ dm me for collab`);
         }
         const cachedRun = JSON.parse(cached);
         setResults(cachedRun.results || []);
+        setCommentStatuses({});
         setLastRunAt(cachedRun.createdAt || "");
         setLastSource(cachedRun.source === "youtube" ? "YouTube" : "Manual");
         return;
       }
       setResults(payload.results);
+      setCommentStatuses({});
       setLastRunAt(payload.createdAt || "");
       setLastSource(payload.source === "youtube" ? "YouTube" : "Manual");
       window.localStorage.setItem("tapfix:lastBatchRun", JSON.stringify(payload));
@@ -441,6 +445,7 @@ dm me for collab`);
         throw new Error(payload.message || payload.error || "YouTube dry run failed");
       }
       setResults(payload.results || []);
+      setCommentStatuses({});
       setLastRunAt(payload.createdAt || "");
       setLastSource("YouTube");
       window.localStorage.setItem("tapfix:lastBatchRun", JSON.stringify(payload));
@@ -448,6 +453,57 @@ dm me for collab`);
       setError(youtubeError.message);
     } finally {
       setIsRunning(false);
+    }
+  }
+
+  async function runManualAction(item, action) {
+    if (lastSource !== "YouTube") {
+      setError("Manual actions work only with YouTube dry runs");
+      return;
+    }
+
+    if (action === "delete" && !window.confirm("Delete this YouTube comment?")) {
+      return;
+    }
+
+    setError("");
+    setCommentStatuses((current) => ({
+      ...current,
+      [item.id]: { status: "working", message: action === "reply" ? "Publishing..." : action === "delete" ? "Deleting..." : "Skipped" },
+    }));
+
+    if (action === "skip") {
+      setCommentStatuses((current) => ({
+        ...current,
+        [item.id]: { status: "skipped", message: "Skipped" },
+      }));
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/youtube/comments/${encodeURIComponent(item.id)}/${action}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: action === "reply" ? JSON.stringify({ reply: item.reply }) : undefined,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || `${action} failed`);
+      }
+
+      setCommentStatuses((current) => ({
+        ...current,
+        [item.id]: {
+          status: payload.status || (action === "reply" ? "published" : "deleted"),
+          message: action === "reply" ? "Published" : "Deleted",
+        },
+      }));
+    } catch (manualError) {
+      setCommentStatuses((current) => ({
+        ...current,
+        [item.id]: { status: "failed", message: manualError.message || "Failed" },
+      }));
+      setError(manualError.message || `${action} failed`);
     }
   }
 
@@ -495,7 +551,7 @@ dm me for collab`);
           <StatusRow label="Deletes" value={deleteCount} />
           <StatusRow label="Last run" value={lastRunAt ? new Date(lastRunAt).toLocaleString() : "Not loaded"} />
           <StatusRow label="Source" value={lastSource} />
-          <StatusRow label="Mode" value="Dry run only" />
+          <StatusRow label="Mode" value={lastSource === "YouTube" ? "Manual approve" : "Dry run only"} />
         </Panel>
       </section>
       {results.length > 0 && (
@@ -509,19 +565,60 @@ dm me for collab`);
                 <th>Category</th>
                 <th>Video</th>
                 <th>AI Reply</th>
+                <th>Manual</th>
               </tr>
             </thead>
             <tbody>
-              {results.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.comment}</td>
-                  <td><StatusPill status={item.action} /></td>
-                  <td><LanguageCell language={item.detectedLanguage} confidence={item.languageConfidence} /></td>
-                  <td><Badge value={item.category} /></td>
-                  <td>{item.videoId || "manual-test"}</td>
-                  <td>{item.reply}</td>
-                </tr>
-              ))}
+              {results.map((item) => {
+                const manualStatus = commentStatuses[item.id];
+                const isWorking = manualStatus?.status === "working";
+                const isDone = ["published", "deleted", "skipped"].includes(manualStatus?.status);
+                const isYouTubeRun = lastSource === "YouTube";
+
+                return (
+                  <tr key={item.id}>
+                    <td>{item.comment}</td>
+                    <td><StatusPill status={item.action} /></td>
+                    <td><LanguageCell language={item.detectedLanguage} confidence={item.languageConfidence} /></td>
+                    <td><Badge value={item.category} /></td>
+                    <td>{item.videoId || "manual-test"}</td>
+                    <td>{item.reply}</td>
+                    <td>
+                      <div className="manual-actions">
+                        {manualStatus && <StatusPill status={manualStatus.status}>{manualStatus.message}</StatusPill>}
+                        {item.action === "reply" && (
+                          <button
+                            className="mini-action publish"
+                            onClick={() => runManualAction(item, "reply")}
+                            disabled={!isYouTubeRun || isWorking || isDone}
+                            type="button"
+                          >
+                            Publish
+                          </button>
+                        )}
+                        {item.action === "delete" && (
+                          <button
+                            className="mini-action delete"
+                            onClick={() => runManualAction(item, "delete")}
+                            disabled={!isYouTubeRun || isWorking || isDone}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        )}
+                        <button
+                          className="mini-action"
+                          onClick={() => runManualAction(item, "skip")}
+                          disabled={!isYouTubeRun || isWorking || isDone}
+                          type="button"
+                        >
+                          Skip
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -649,8 +746,8 @@ function Badge({ value }) {
   return <span className={`badge ${value.includes("safe") ? "safe" : "risk"}`}>{value}</span>;
 }
 
-function StatusPill({ status }) {
-  return <span className={`status-pill ${status}`}>{status}</span>;
+function StatusPill({ status, children }) {
+  return <span className={`status-pill ${status}`}>{children || status}</span>;
 }
 
 function LanguageCell({ language, confidence }) {

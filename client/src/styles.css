@@ -455,14 +455,54 @@ td:nth-child(2) {
 }
 
 .badge.risk,
-.status-pill.deleted {
+.status-pill.deleted,
+.status-pill.failed {
   background: var(--danger-bg);
   color: var(--danger);
 }
 
-.status-pill.review {
+.status-pill.review,
+.status-pill.working {
   background: rgba(249, 171, 0, 0.18);
   color: var(--warning);
+}
+
+.status-pill.skipped {
+  background: var(--surface-hover);
+  color: var(--muted);
+}
+
+.manual-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 210px;
+}
+
+.mini-action {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mini-action.publish {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.mini-action.delete {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mini-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 textarea,

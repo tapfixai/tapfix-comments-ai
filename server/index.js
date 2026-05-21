@@ -68,6 +68,10 @@ const youtubeDryRunSchema = z.object({
   maxResults: z.number().int().min(1).max(100).optional(),
 }).optional();
 
+const youtubeReplySchema = z.object({
+  reply: z.string().min(1).max(120),
+});
+
 server.get("/health", async () => ({
   status: "ok",
   youtube: process.env.GOOGLE_CLIENT_ID ? "configured" : "missing_oauth_config",
@@ -285,6 +289,76 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
     return reply.code(statusCode >= 400 && statusCode < 600 ? statusCode : 502).send({
       error: "youtube_dry_run_failed",
       message: error.message || "YouTube dry-run failed",
+      details: error.details,
+    });
+  }
+});
+
+server.post("/api/youtube/comments/:commentId/reply", async (request, reply) => {
+  const parsed = youtubeReplySchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: "invalid_reply", details: parsed.error.flatten() });
+  }
+
+  const replySafety = validateReply(parsed.data.reply, settings.maxReplyLength);
+  if (!replySafety.safe) {
+    return reply.code(400).send({ error: "unsafe_reply", reason: replySafety.reason });
+  }
+
+  const connectedUser = await getConnectedYouTubeCredentials();
+  if (!connectedUser) {
+    return reply.code(409).send({ error: "youtube_not_connected", message: "Connect YouTube first" });
+  }
+
+  try {
+    const accessToken = await getValidYouTubeAccessToken(connectedUser);
+    const result = await publishYouTubeReply({
+      accessToken,
+      commentId: request.params.commentId,
+      text: parsed.data.reply,
+    });
+
+    addLog("youtube_reply", `Published reply to ${request.params.commentId}`);
+    return {
+      status: "published",
+      commentId: request.params.commentId,
+      replyId: result.id,
+    };
+  } catch (error) {
+    const statusCode = Number(error.statusCode || 502);
+    addLog("youtube_reply_error", `${request.params.commentId}: ${error.message || "Reply failed"}`);
+    return reply.code(statusCode >= 400 && statusCode < 600 ? statusCode : 502).send({
+      error: "youtube_reply_failed",
+      message: error.message || "Reply failed",
+      details: error.details,
+    });
+  }
+});
+
+server.post("/api/youtube/comments/:commentId/delete", async (request, reply) => {
+  const connectedUser = await getConnectedYouTubeCredentials();
+  if (!connectedUser) {
+    return reply.code(409).send({ error: "youtube_not_connected", message: "Connect YouTube first" });
+  }
+
+  try {
+    const accessToken = await getValidYouTubeAccessToken(connectedUser);
+    await deleteYouTubeComment({
+      accessToken,
+      commentId: request.params.commentId,
+    });
+
+    addLog("youtube_delete", `Deleted comment ${request.params.commentId}`);
+    return {
+      status: "deleted",
+      commentId: request.params.commentId,
+    };
+  } catch (error) {
+    const statusCode = Number(error.statusCode || 502);
+    addLog("youtube_delete_error", `${request.params.commentId}: ${error.message || "Delete failed"}`);
+    return reply.code(statusCode >= 400 && statusCode < 600 ? statusCode : 502).send({
+      error: "youtube_delete_failed",
+      message: error.message || "Delete failed",
       details: error.details,
     });
   }
@@ -793,6 +867,54 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }
   }
 
   return comments.slice(0, maxResults);
+}
+
+async function publishYouTubeReply({ accessToken, commentId, text }) {
+  const response = await fetch("https://www.googleapis.com/youtube/v3/comments?part=snippet", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      snippet: {
+        parentId: commentId,
+        textOriginal: text,
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const errorMessage = payload.error?.message || `youtube_reply_request_failed_${response.status}`;
+    const error = new Error(errorMessage);
+    error.statusCode = response.status;
+    error.details = payload;
+    throw error;
+  }
+
+  return payload;
+}
+
+async function deleteYouTubeComment({ accessToken, commentId }) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/comments");
+  url.searchParams.set("id", commentId);
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const errorMessage = payload.error?.message || `youtube_delete_request_failed_${response.status}`;
+    const error = new Error(errorMessage);
+    error.statusCode = response.status;
+    error.details = payload;
+    throw error;
+  }
+
+  return true;
 }
 
 server.listen({ port, host });
