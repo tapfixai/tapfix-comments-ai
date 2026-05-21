@@ -741,40 +741,58 @@ async function getValidYouTubeAccessToken(user) {
 }
 
 async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }) {
-  const url = new URL("https://www.googleapis.com/youtube/v3/commentThreads");
-  url.searchParams.set("part", "snippet");
-  url.searchParams.set("allThreadsRelatedToChannelId", channelId);
-  url.searchParams.set("maxResults", String(maxResults));
-  url.searchParams.set("order", "time");
-  url.searchParams.set("textFormat", "plainText");
+  const comments = [];
+  let pageToken = "";
 
-  const response = await fetch(url, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  });
-  const payload = await response.json().catch(() => ({}));
+  while (comments.length < maxResults) {
+    const remaining = maxResults - comments.length;
+    const url = new URL("https://www.googleapis.com/youtube/v3/commentThreads");
+    url.searchParams.set("part", "snippet");
+    url.searchParams.set("allThreadsRelatedToChannelId", channelId);
+    url.searchParams.set("maxResults", String(Math.min(100, remaining)));
+    url.searchParams.set("order", "time");
+    url.searchParams.set("textFormat", "plainText");
+    if (pageToken) {
+      url.searchParams.set("pageToken", pageToken);
+    }
 
-  if (!response.ok) {
-    const errorMessage = payload.error?.message || `youtube_comments_request_failed_${response.status}`;
-    const error = new Error(errorMessage);
-    error.statusCode = response.status;
-    error.details = payload;
-    throw error;
+    const response = await fetch(url, {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const errorMessage = payload.error?.message || `youtube_comments_request_failed_${response.status}`;
+      const error = new Error(errorMessage);
+      error.statusCode = response.status;
+      error.details = payload;
+      throw error;
+    }
+
+    const pageComments = (payload.items || [])
+      .map((item) => {
+        const topLevelComment = item.snippet?.topLevelComment;
+        const snippet = topLevelComment?.snippet;
+        const text = snippet?.textOriginal || snippet?.textDisplay || "";
+
+        return {
+          id: topLevelComment?.id || item.id,
+          videoId: item.snippet?.videoId || "unknown-video",
+          text,
+          authorName: snippet?.authorDisplayName || "Viewer",
+        };
+      })
+      .filter((comment) => comment.id && comment.text);
+
+    comments.push(...pageComments);
+
+    pageToken = payload.nextPageToken || "";
+    if (!pageToken || !pageComments.length) {
+      break;
+    }
   }
 
-  return (payload.items || [])
-    .map((item) => {
-      const topLevelComment = item.snippet?.topLevelComment;
-      const snippet = topLevelComment?.snippet;
-      const text = snippet?.textOriginal || snippet?.textDisplay || "";
-
-      return {
-        id: topLevelComment?.id || item.id,
-        videoId: item.snippet?.videoId || "unknown-video",
-        text,
-        authorName: snippet?.authorDisplayName || "Viewer",
-      };
-    })
-    .filter((comment) => comment.id && comment.text);
+  return comments.slice(0, maxResults);
 }
 
 server.listen({ port, host });

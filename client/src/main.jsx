@@ -362,6 +362,7 @@ dm me for collab`);
   const [error, setError] = useState("");
   const [lastRunAt, setLastRunAt] = useState("");
   const [lastSource, setLastSource] = useState("Manual");
+  const [youtubeLimit, setYoutubeLimit] = useState(50);
 
   async function runBatch() {
     const commentsToAnalyze = input
@@ -433,7 +434,7 @@ dm me for collab`);
       const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: 25 }),
+        body: JSON.stringify({ maxResults: youtubeLimit }),
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -476,6 +477,14 @@ dm me for collab`);
               <Video size={18} />
               YouTube dry run
             </button>
+            <label className="inline-select">
+              <span>Latest</span>
+              <select value={youtubeLimit} onChange={(event) => setYoutubeLimit(Number(event.target.value))}>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </label>
             {error && <span className="error-text">{error}</span>}
           </div>
         </Panel>

@@ -490,8 +490,34 @@ textarea {
 .batch-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 14px;
+}
+
+.inline-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.inline-select span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inline-select select {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  outline: 0;
 }
 
 .error-text {
