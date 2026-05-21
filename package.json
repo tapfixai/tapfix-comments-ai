@@ -11,7 +11,6 @@
     "server": "node server/index.js",
     "start": "node server/index.js",
     "build": "vite build",
-    "postinstall": "prisma generate",
     "preview": "vite preview --host 127.0.0.1",
     "prisma:generate": "prisma generate",
     "check": "npm run build"
