@@ -5,7 +5,13 @@ import rateLimit from "@fastify/rate-limit";
 import cron from "node-cron";
 import { z } from "zod";
 import { analyzeComment, validateReply } from "./safety.js";
-import { latestBatchRunFromDb, listBatchRunsFromDb, persistBatchRun } from "./db.js";
+import {
+  latestBatchRunFromDb,
+  listBatchRunsFromDb,
+  listLogsFromDb,
+  persistBatchRun,
+  persistLog,
+} from "./db.js";
 
 const server = Fastify({ logger: true });
 const port = Number(process.env.PORT || 8080);
@@ -69,7 +75,14 @@ server.patch("/api/settings", async (request) => {
   return settings;
 });
 
-server.get("/api/logs", async () => logs.slice(-100).reverse());
+server.get("/api/logs", async () => {
+  const dbLogs = await listLogsFromDb();
+  if (dbLogs) {
+    return dbLogs;
+  }
+
+  return logs.slice(-100).reverse();
+});
 
 server.get("/api/comments/batch-runs", async () => {
   const dbRuns = await listBatchRunsFromDb();
@@ -81,7 +94,7 @@ server.get("/api/comments/batch-runs", async () => {
       replies: run.replies,
       reviews: run.reviews,
       deletes: run.deletes,
-      resultsCount: run._count.results,
+      resultsCount: run.resultsCount,
     }));
   }
 
@@ -243,12 +256,15 @@ cron.schedule("*/10 * * * *", () => {
 });
 
 function addLog(action, message) {
-  logs.push({
+  const log = {
     id: crypto.randomUUID(),
     action,
     message,
     createdAt: new Date().toISOString(),
-  });
+  };
+
+  logs.push(log);
+  void persistLog(log);
 }
 
 server.listen({ port, host });
