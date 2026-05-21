@@ -9,8 +9,10 @@ import {
   latestBatchRunFromDb,
   getConnectedUser,
   getConnectedYouTubeCredentials,
+  listProcessedCommentIds,
   listBatchRunsFromDb,
   listLogsFromDb,
+  markCommentProcessed,
   persistBatchRun,
   persistLog,
   updateConnectedUserTokens,
@@ -46,6 +48,7 @@ const settings = {
 
 const logs = [];
 const batchRuns = [];
+const processedCommentIds = new Set();
 const googleScopes = [
   "openid",
   "email",
@@ -258,8 +261,9 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
       channelId: connectedUser.youtubeChannelId,
       maxResults: parsed.data?.maxResults || 25,
     });
+    const unprocessedComments = await filterUnprocessedComments(comments);
 
-    if (!comments.length) {
+    if (!unprocessedComments.length) {
       addLog("youtube_dry_run", `No recent YouTube comments found for ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId}`);
       return {
         id: crypto.randomUUID(),
@@ -275,7 +279,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
       };
     }
 
-    const run = await createDryRun(comments, {
+    const run = await createDryRun(unprocessedComments, {
       source: "youtube",
       channelId: connectedUser.youtubeChannelId,
       channelTitle: connectedUser.youtubeChannelTitle,
@@ -317,6 +321,14 @@ server.post("/api/youtube/comments/:commentId/reply", async (request, reply) => 
       commentId: request.params.commentId,
       text: parsed.data.reply,
     });
+    const videoId = result.snippet?.videoId;
+    await rememberProcessedComment({
+      commentId: request.params.commentId,
+      videoId,
+      action: "reply",
+      status: "published",
+      replyText: parsed.data.reply,
+    });
 
     addLog("youtube_reply", `Published reply to ${request.params.commentId}`);
     return {
@@ -349,6 +361,12 @@ server.post("/api/youtube/comments/:commentId/delete", async (request, reply) =>
       accessToken,
       commentId: request.params.commentId,
     });
+    await rememberProcessedComment({
+      commentId: request.params.commentId,
+      videoId: request.body?.videoId,
+      action: "delete",
+      status: "deleted",
+    });
 
     addLog("youtube_delete", `Deleted comment ${request.params.commentId}`);
     return {
@@ -364,6 +382,21 @@ server.post("/api/youtube/comments/:commentId/delete", async (request, reply) =>
       details: error.details,
     });
   }
+});
+
+server.post("/api/youtube/comments/:commentId/skip", async (request) => {
+  await rememberProcessedComment({
+    commentId: request.params.commentId,
+    videoId: request.body?.videoId,
+    action: "skip",
+    status: "skipped",
+  });
+
+  addLog("youtube_skip", `Skipped comment ${request.params.commentId}`);
+  return {
+    status: "skipped",
+    commentId: request.params.commentId,
+  };
 });
 
 server.post("/api/dry-run/comments", async (request, reply) => {
@@ -459,6 +492,17 @@ function addLog(action, message) {
 
   logs.push(log);
   void persistLog(log);
+}
+
+async function rememberProcessedComment({ commentId, videoId, action, status, replyText }) {
+  processedCommentIds.add(commentId);
+  await markCommentProcessed({ commentId, videoId, action, status, replyText });
+}
+
+async function filterUnprocessedComments(comments) {
+  const dbProcessedIds = await listProcessedCommentIds();
+  const processedIds = new Set(dbProcessedIds || processedCommentIds);
+  return comments.filter((comment) => !processedIds.has(comment.id));
 }
 
 async function createDryRun(comments, meta = {}) {

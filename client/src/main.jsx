@@ -1,11 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
   Bot,
   CheckCircle2,
-  ChevronDown,
   Clock3,
   Database,
   FileText,
@@ -31,69 +30,6 @@ const navItems = [
   { id: "ai", label: "AI Settings", icon: Bot },
   { id: "safety", label: "Safety", icon: ShieldCheck },
   { id: "logs", label: "Logs", icon: FileText },
-];
-
-const comments = [
-  {
-    id: "c_101",
-    comment: "This helped me sleep after a long shift, thank you",
-    reply: "So happy it helped you rest. Sleep well tonight.",
-    language: "English",
-    confidence: 0.96,
-    category: "safe",
-    action: "reply + like",
-    video: "Rain tapping ASMR",
-    date: "2026-05-20 09:12",
-    status: "published",
-  },
-  {
-    id: "c_102",
-    comment: "check my profile http://bit.ly/win",
-    reply: "DELETE",
-    language: "English",
-    confidence: 0.87,
-    category: "link / scam",
-    action: "delete",
-    video: "Soft whispering",
-    date: "2026-05-20 09:08",
-    status: "deleted",
-  },
-  {
-    id: "c_103",
-    comment: "lol",
-    reply: "DELETE",
-    language: "Unknown",
-    confidence: 0.28,
-    category: "meaningless",
-    action: "delete",
-    video: "Brush sounds",
-    date: "2026-05-20 08:44",
-    status: "deleted",
-  },
-  {
-    id: "c_104",
-    comment: "La textura del microfono es perfecta aqui",
-    reply: "Gracias, me alegra que la textura se sienta bien.",
-    language: "Spanish",
-    confidence: 0.93,
-    category: "safe",
-    action: "reply + like",
-    video: "No talking triggers",
-    date: "2026-05-20 08:21",
-    status: "published",
-  },
-  {
-    id: "c_105",
-    comment: "dm me for collab",
-    reply: "DELETE",
-    language: "English",
-    confidence: 0.72,
-    category: "spam",
-    action: "delete",
-    video: "Rain tapping ASMR",
-    date: "2026-05-20 07:55",
-    status: "deleted",
-  },
 ];
 
 const demoLogs = [
@@ -134,6 +70,7 @@ function App() {
   const [liveLogs, setLiveLogs] = useState(demoLogs);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState("");
+  const [stats, setStats] = useState({ processed: 0, deleted: 0, published: 0, errors: 0 });
   const [authStatus, setAuthStatus] = useState({
     googleConfigured: false,
     connected: false,
@@ -161,6 +98,7 @@ function App() {
   useEffect(() => {
     refreshLogs();
     refreshAuthStatus();
+    refreshStats();
   }, []);
 
   const refreshAuthStatus = async () => {
@@ -174,11 +112,25 @@ function App() {
     }
   };
 
-  const stats = useMemo(() => {
-    const deleted = comments.filter((item) => item.status === "deleted").length;
-    const published = comments.filter((item) => item.status === "published").length;
-    return { processed: comments.length, deleted, published, errors: 1 };
-  }, []);
+  const refreshStats = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/comments/batch-runs/latest`);
+      if (!response.ok) {
+        return;
+      }
+
+      const latestRun = await response.json();
+      const latestResults = latestRun.results || [];
+      setStats({
+        processed: latestRun.total || latestResults.length,
+        deleted: latestResults.filter((item) => item.status === "deleted").length,
+        published: latestResults.filter((item) => item.status === "published").length,
+        errors: liveLogs.filter((log) => log.status === "error").length,
+      });
+    } catch (error) {
+      console.error("Failed to load stats", error);
+    }
+  };
 
   const pages = {
     dashboard: (
@@ -303,17 +255,81 @@ function Dashboard({ stats, autoReply, setAutoReply, autoDelete, setAutoDelete, 
 }
 
 function Comments() {
+  const [items, setItems] = useState([]);
+  const [latestRun, setLatestRun] = useState(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function loadLatestComments() {
+    setIsLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_URL}/api/comments/batch-runs/latest`);
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "No saved comments yet");
+      }
+      setLatestRun(payload);
+      setItems(payload.results || []);
+    } catch (loadError) {
+      setError(loadError.message || "Failed to load comments");
+      setItems([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadLatestComments();
+  }, []);
+
+  const filteredItems = items.filter((item) => {
+    const status = item.status || "pending";
+    const matchesStatus = statusFilter === "all" || status === statusFilter;
+    const haystack = [
+      item.comment,
+      item.reply,
+      item.detectedLanguage,
+      item.category,
+      item.action,
+      item.videoId,
+      item.authorName,
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    return matchesStatus && haystack.includes(query.trim().toLowerCase());
+  });
+
   return (
     <div className="page-stack">
       <div className="toolbar">
         <label className="search-box">
           <Search size={17} />
-          <input placeholder="Search comments, videos, categories" />
+          <input
+            placeholder="Search comments, videos, categories"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
         </label>
-        <button className="filter-button" type="button">
-          Status <ChevronDown size={16} />
+        <select className="filter-button" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <option value="all">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="published">Published</option>
+          <option value="deleted">Deleted</option>
+          <option value="skipped">Skipped</option>
+        </select>
+        <button className="filter-button" onClick={loadLatestComments} disabled={isLoading} type="button">
+          <RefreshCw size={16} />
+          {isLoading ? "Loading" : "Refresh"}
         </button>
       </div>
+      {latestRun && (
+        <p className="field-note">
+          Showing latest {latestRun.source === "youtube" ? "YouTube" : "manual"} run from {new Date(latestRun.createdAt).toLocaleString()}.
+        </p>
+      )}
+      {error && <p className="error-text">{error}</p>}
       <div className="table-wrap">
         <table>
           <thead>
@@ -329,20 +345,32 @@ function Comments() {
             </tr>
           </thead>
           <tbody>
-            {comments.map((item) => (
+            {filteredItems.map((item) => (
               <tr key={item.id}>
                 <td>{item.comment}</td>
                 <td>{item.reply}</td>
                 <td>
-                  <LanguageCell language={item.language} confidence={item.confidence} />
+                  <LanguageCell language={item.detectedLanguage || item.language} confidence={item.languageConfidence || item.confidence} />
                 </td>
                 <td><Badge value={item.category} /></td>
                 <td>{item.action}</td>
-                <td>{item.video}</td>
-                <td>{item.date}</td>
-                <td><StatusPill status={item.status} /></td>
+                <td>
+                  <div className="link-stack">
+                    <span>{item.video || item.videoId || "unknown-video"}</span>
+                    {item.videoUrl && <a href={item.videoUrl} target="_blank" rel="noreferrer">Open video</a>}
+                    {item.commentUrl && <a href={item.commentUrl} target="_blank" rel="noreferrer">Open comment</a>}
+                    {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target="_blank" rel="noreferrer">Open in Studio</a>}
+                  </div>
+                </td>
+                <td>{item.processedAt ? new Date(item.processedAt).toLocaleString() : latestRun?.createdAt ? new Date(latestRun.createdAt).toLocaleString() : item.date}</td>
+                <td><StatusPill status={item.status || "pending"} /></td>
               </tr>
             ))}
+            {!filteredItems.length && (
+              <tr>
+                <td colSpan={8}>{isLoading ? "Loading comments..." : "No comments to show yet. Run YouTube dry run first."}</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -472,19 +500,11 @@ dm me for collab`);
       [item.id]: { status: "working", message: action === "reply" ? "Publishing..." : action === "delete" ? "Deleting..." : "Skipped" },
     }));
 
-    if (action === "skip") {
-      setCommentStatuses((current) => ({
-        ...current,
-        [item.id]: { status: "skipped", message: "Skipped" },
-      }));
-      return;
-    }
-
     try {
       const response = await fetch(`${API_URL}/api/youtube/comments/${encodeURIComponent(item.id)}/${action}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: action === "reply" ? JSON.stringify({ reply: item.reply }) : undefined,
+        body: action === "reply" ? JSON.stringify({ reply: item.reply }) : JSON.stringify({ videoId: item.videoId }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {

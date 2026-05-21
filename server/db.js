@@ -70,6 +70,16 @@ async function ensureDatabase() {
       ALTER TABLE dry_run_results
         ADD COLUMN IF NOT EXISTS video_id TEXT;
 
+      CREATE TABLE IF NOT EXISTS processed_comments (
+        comment_id TEXT PRIMARY KEY,
+        video_id TEXT,
+        action TEXT NOT NULL,
+        status TEXT NOT NULL,
+        reply_text TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS logs (
         id TEXT PRIMARY KEY,
         action TEXT NOT NULL,
@@ -231,20 +241,25 @@ export async function latestBatchRunFromDb() {
     const resultsResult = await client.query(
       `
         SELECT
-          id,
-          external_comment_id AS "externalCommentId",
-          video_id AS "videoId",
-          author_name AS "authorName",
-          comment_text AS "commentText",
-          action,
-          safety_category AS "safetyCategory",
-          detected_language AS "detectedLanguage",
-          reply_language AS "replyLanguage",
-          language_confidence AS "languageConfidence",
-          ai_reply AS "aiReply"
+          dry_run_results.id,
+          dry_run_results.external_comment_id AS "externalCommentId",
+          dry_run_results.video_id AS "videoId",
+          dry_run_results.author_name AS "authorName",
+          dry_run_results.comment_text AS "commentText",
+          dry_run_results.action,
+          dry_run_results.safety_category AS "safetyCategory",
+          dry_run_results.detected_language AS "detectedLanguage",
+          dry_run_results.reply_language AS "replyLanguage",
+          dry_run_results.language_confidence AS "languageConfidence",
+          dry_run_results.ai_reply AS "aiReply",
+          pc.action AS "processedAction",
+          pc.status AS "processedStatus",
+          pc.reply_text AS "processedReplyText",
+          pc.updated_at AS "processedAt"
         FROM dry_run_results
+        LEFT JOIN processed_comments pc ON pc.comment_id = dry_run_results.external_comment_id
         WHERE batch_id = $1
-        ORDER BY created_at ASC
+        ORDER BY dry_run_results.created_at ASC
       `,
       [batch.id],
     );
@@ -262,18 +277,80 @@ export async function latestBatchRunFromDb() {
       results: resultsResult.rows.map((result) => ({
         id: result.externalCommentId || result.id,
         videoId: result.videoId,
+        videoUrl: getYouTubeVideoUrl(result.videoId),
+        commentUrl: getYouTubeCommentUrl(result.videoId, result.externalCommentId || result.id),
+        studioCommentsUrl: getYouTubeStudioCommentsUrl(result.videoId),
         comment: result.commentText,
         authorName: result.authorName || "Viewer",
         action: result.action,
+        status: result.processedStatus || "pending",
+        processedAction: result.processedAction,
+        processedAt: result.processedAt ? result.processedAt.toISOString() : null,
         category: result.safetyCategory,
         detectedLanguage: result.detectedLanguage,
         replyLanguage: result.replyLanguage,
         languageConfidence: result.languageConfidence,
-        reply: result.aiReply,
+        reply: result.processedReplyText || result.aiReply,
       })),
     };
   } catch (error) {
     console.error("Failed to load latest dry-run batch", error);
+    return null;
+  }
+}
+
+export async function markCommentProcessed({ commentId, videoId, action, status, replyText }) {
+  const client = await ensureDatabase();
+  if (!client) {
+    return null;
+  }
+
+  try {
+    const { rows } = await client.query(
+      `
+        INSERT INTO processed_comments (comment_id, video_id, action, status, reply_text, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (comment_id) DO UPDATE SET
+          video_id = COALESCE(EXCLUDED.video_id, processed_comments.video_id),
+          action = EXCLUDED.action,
+          status = EXCLUDED.status,
+          reply_text = COALESCE(EXCLUDED.reply_text, processed_comments.reply_text),
+          updated_at = NOW()
+        RETURNING
+          comment_id AS "commentId",
+          video_id AS "videoId",
+          action,
+          status,
+          reply_text AS "replyText",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+      `,
+      [commentId, videoId || null, action, status, replyText || null],
+    );
+
+    const row = rows[0];
+    return {
+      ...row,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  } catch (error) {
+    console.error("Failed to mark comment processed", error);
+    return null;
+  }
+}
+
+export async function listProcessedCommentIds() {
+  const client = await ensureDatabase();
+  if (!client) {
+    return null;
+  }
+
+  try {
+    const { rows } = await client.query("SELECT comment_id AS \"commentId\" FROM processed_comments");
+    return rows.map((row) => row.commentId);
+  } catch (error) {
+    console.error("Failed to list processed comment IDs", error);
     return null;
   }
 }
@@ -298,6 +375,31 @@ export async function persistLog(log) {
     console.error("Failed to persist log", error);
     return null;
   }
+}
+
+function getYouTubeVideoUrl(videoId) {
+  if (!videoId || videoId === "manual-test" || videoId === "unknown-video") {
+    return "";
+  }
+
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+}
+
+function getYouTubeCommentUrl(videoId, commentId) {
+  const videoUrl = getYouTubeVideoUrl(videoId);
+  if (!videoUrl || !commentId) {
+    return "";
+  }
+
+  return `${videoUrl}&lc=${encodeURIComponent(commentId)}`;
+}
+
+function getYouTubeStudioCommentsUrl(videoId) {
+  if (!videoId || videoId === "manual-test" || videoId === "unknown-video") {
+    return "";
+  }
+
+  return `https://studio.youtube.com/video/${encodeURIComponent(videoId)}/comments`;
 }
 
 export async function listLogsFromDb(limit = 100) {
