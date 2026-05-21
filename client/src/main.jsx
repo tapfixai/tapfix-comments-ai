@@ -134,6 +134,12 @@ function App() {
   const [liveLogs, setLiveLogs] = useState(demoLogs);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState("");
+  const [authStatus, setAuthStatus] = useState({
+    googleConfigured: false,
+    connected: false,
+    user: null,
+    authUrl: `${API_URL}/auth/google`,
+  });
 
   const refreshLogs = async () => {
     setLogsLoading(true);
@@ -154,7 +160,19 @@ function App() {
 
   useEffect(() => {
     refreshLogs();
+    refreshAuthStatus();
   }, []);
+
+  const refreshAuthStatus = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/status`);
+      if (response.ok) {
+        setAuthStatus(await response.json());
+      }
+    } catch (error) {
+      console.error("Failed to load auth status", error);
+    }
+  };
 
   const stats = useMemo(() => {
     const deleted = comments.filter((item) => item.status === "deleted").length;
@@ -173,6 +191,7 @@ function App() {
         autoLike={autoLike}
         setAutoLike={setAutoLike}
         logs={liveLogs}
+        authStatus={authStatus}
       />
     ),
     comments: <Comments />,
@@ -238,7 +257,7 @@ function App() {
   );
 }
 
-function Dashboard({ stats, autoReply, setAutoReply, autoDelete, setAutoDelete, autoLike, setAutoLike, logs }) {
+function Dashboard({ stats, autoReply, setAutoReply, autoDelete, setAutoDelete, autoLike, setAutoLike, logs, authStatus }) {
   return (
     <div className="page-stack">
       <section className="metric-grid">
@@ -254,10 +273,26 @@ function Dashboard({ stats, autoReply, setAutoReply, autoDelete, setAutoDelete, 
           <Toggle label="Auto Like" checked={autoLike} onChange={setAutoLike} note="Disabled when API returns not_supported" />
         </Panel>
         <Panel title="System Status">
+          <StatusRow label="YouTube OAuth" value={authStatus.connected ? "Connected" : authStatus.googleConfigured ? "Ready to connect" : "Config missing"} />
+          {authStatus.connected && <StatusRow label="Channel" value={authStatus.user?.youtubeChannelTitle || authStatus.user?.youtubeChannelId || "Connected"} />}
           <StatusRow label="Comment interval" value="10 minutes" />
           <StatusRow label="Daily reply limit" value="42 / 50 left" />
           <StatusRow label="Reply max length" value="120 chars" />
           <StatusRow label="Duplicate guard" value="Active" />
+          <button
+            className="primary-button status-action"
+            type="button"
+            onClick={() => {
+              window.location.href = authStatus.authUrl || `${API_URL}/auth/google`;
+            }}
+            disabled={!authStatus.googleConfigured}
+          >
+            <Video size={18} />
+            {authStatus.connected ? "Reconnect YouTube" : "Connect YouTube"}
+          </button>
+          {!authStatus.googleConfigured && (
+            <p className="field-note">Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Railway to enable login.</p>
+          )}
         </Panel>
       </section>
       <Panel title="Latest Actions">

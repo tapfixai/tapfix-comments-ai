@@ -233,6 +233,18 @@ h2 {
   color: #fff;
 }
 
+.primary-button:disabled {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.status-action {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .filter-button {
   padding: 0 12px;
 }

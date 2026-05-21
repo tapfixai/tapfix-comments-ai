@@ -64,6 +64,18 @@ async function ensureDatabase() {
         message TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        google_email TEXT UNIQUE,
+        youtube_channel_id TEXT,
+        youtube_channel_title TEXT,
+        access_token TEXT,
+        refresh_token TEXT,
+        token_expiry TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     dbReady = true;
     return client;
@@ -279,6 +291,84 @@ export async function listLogsFromDb(limit = 100) {
     }));
   } catch (error) {
     console.error("Failed to list logs", error);
+    return null;
+  }
+}
+
+export async function upsertConnectedUser(user) {
+  const client = await ensureDatabase();
+  if (!client) {
+    return null;
+  }
+
+  try {
+    const { rows } = await client.query(
+      `
+        INSERT INTO users (
+          id,
+          google_email,
+          youtube_channel_id,
+          youtube_channel_title,
+          access_token,
+          refresh_token,
+          token_expiry,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        ON CONFLICT (google_email) DO UPDATE SET
+          youtube_channel_id = EXCLUDED.youtube_channel_id,
+          youtube_channel_title = EXCLUDED.youtube_channel_title,
+          access_token = EXCLUDED.access_token,
+          refresh_token = COALESCE(EXCLUDED.refresh_token, users.refresh_token),
+          token_expiry = EXCLUDED.token_expiry,
+          updated_at = NOW()
+        RETURNING id, google_email AS "googleEmail", youtube_channel_id AS "youtubeChannelId",
+          youtube_channel_title AS "youtubeChannelTitle", created_at AS "createdAt", updated_at AS "updatedAt"
+      `,
+      [
+        user.id,
+        user.googleEmail,
+        user.youtubeChannelId,
+        user.youtubeChannelTitle,
+        user.accessToken,
+        user.refreshToken,
+        user.tokenExpiry,
+      ],
+    );
+    return rows[0];
+  } catch (error) {
+    console.error("Failed to save connected YouTube user", error);
+    return null;
+  }
+}
+
+export async function getConnectedUser() {
+  const client = await ensureDatabase();
+  if (!client) {
+    return null;
+  }
+
+  try {
+    const { rows } = await client.query(`
+      SELECT id, google_email AS "googleEmail", youtube_channel_id AS "youtubeChannelId",
+        youtube_channel_title AS "youtubeChannelTitle", created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM users
+      WHERE refresh_token IS NOT NULL
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `);
+    const user = rows[0];
+    if (!user) {
+      return null;
+    }
+
+    return {
+      ...user,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+    };
+  } catch (error) {
+    console.error("Failed to load connected YouTube user", error);
     return null;
   }
 }

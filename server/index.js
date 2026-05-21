@@ -7,10 +7,12 @@ import { z } from "zod";
 import { analyzeComment, validateReply } from "./safety.js";
 import {
   latestBatchRunFromDb,
+  getConnectedUser,
   listBatchRunsFromDb,
   listLogsFromDb,
   persistBatchRun,
   persistLog,
+  upsertConnectedUser,
 } from "./db.js";
 
 const server = Fastify({ logger: true });
@@ -42,6 +44,12 @@ const settings = {
 
 const logs = [];
 const batchRuns = [];
+const googleScopes = [
+  "openid",
+  "email",
+  "profile",
+  "https://www.googleapis.com/auth/youtube.force-ssl",
+];
 
 const commentSchema = z.object({
   id: z.string().min(1),
@@ -66,6 +74,86 @@ server.get("/", async () => ({
   panel: process.env.WEB_ORIGIN || "http://127.0.0.1:5173/",
   health: `${process.env.PUBLIC_API_URL || `http://127.0.0.1:${port}`}/health`,
 }));
+
+server.get("/api/auth/status", async () => {
+  const connectedUser = await getConnectedUser();
+  return {
+    googleConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+    connected: Boolean(connectedUser),
+    user: connectedUser,
+    authUrl: `${getPublicApiUrl()}/auth/google`,
+    redirectUri: getGoogleRedirectUri(),
+  };
+});
+
+server.get("/auth/google", async (request, reply) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return reply.code(503).send({ error: "missing_google_oauth_config" });
+  }
+
+  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  authUrl.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID);
+  authUrl.searchParams.set("redirect_uri", getGoogleRedirectUri());
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("scope", googleScopes.join(" "));
+  authUrl.searchParams.set("access_type", "offline");
+  authUrl.searchParams.set("prompt", "consent");
+  authUrl.searchParams.set("include_granted_scopes", "true");
+
+  return reply.redirect(authUrl.toString());
+});
+
+server.get("/auth/google/callback", async (request, reply) => {
+  const code = request.query?.code;
+  if (!code) {
+    return reply.redirect(`${getPanelUrl()}?youtube=error&reason=missing_code`);
+  }
+
+  try {
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: getGoogleRedirectUri(),
+        grant_type: "authorization_code",
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      throw new Error(`token_exchange_failed_${tokenResponse.status}`);
+    }
+
+    const tokens = await tokenResponse.json();
+    const [profile, channel] = await Promise.all([
+      fetchGoogleProfile(tokens.access_token),
+      fetchYouTubeChannel(tokens.access_token),
+    ]);
+
+    if (!channel?.id) {
+      throw new Error("youtube_channel_not_found");
+    }
+
+    const connectedUser = await upsertConnectedUser({
+      id: crypto.randomUUID(),
+      googleEmail: profile.email || `youtube-${channel.id}@unknown.local`,
+      youtubeChannelId: channel.id,
+      youtubeChannelTitle: channel.title,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      tokenExpiry: new Date(Date.now() + Number(tokens.expires_in || 3600) * 1000).toISOString(),
+    });
+
+    addLog("oauth", `Connected YouTube channel ${channel.title || channel.id}`);
+    return reply.redirect(`${getPanelUrl()}?youtube=connected&channel=${encodeURIComponent(connectedUser?.youtubeChannelTitle || channel.title || channel.id)}`);
+  } catch (error) {
+    console.error("Google OAuth callback failed", error);
+    addLog("oauth_error", error.message || "Google OAuth failed");
+    return reply.redirect(`${getPanelUrl()}?youtube=error&reason=${encodeURIComponent(error.message || "oauth_failed")}`);
+  }
+});
 
 server.get("/api/settings", async () => settings);
 
@@ -265,6 +353,46 @@ function addLog(action, message) {
 
   logs.push(log);
   void persistLog(log);
+}
+
+function getPublicApiUrl() {
+  return process.env.PUBLIC_API_URL || `http://127.0.0.1:${port}`;
+}
+
+function getPanelUrl() {
+  return process.env.WEB_ORIGIN || "http://127.0.0.1:5173";
+}
+
+function getGoogleRedirectUri() {
+  return process.env.GOOGLE_REDIRECT_URI || `${getPublicApiUrl()}/auth/google/callback`;
+}
+
+async function fetchGoogleProfile(accessToken) {
+  const response = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    return {};
+  }
+  return response.json();
+}
+
+async function fetchYouTubeChannel(accessToken) {
+  const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true", {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    throw new Error(`youtube_channel_request_failed_${response.status}`);
+  }
+  const data = await response.json();
+  const channel = data.items?.[0];
+  if (!channel) {
+    return null;
+  }
+  return {
+    id: channel.id,
+    title: channel.snippet?.title || channel.id,
+  };
 }
 
 server.listen({ port, host });
