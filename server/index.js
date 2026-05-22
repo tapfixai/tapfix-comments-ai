@@ -10,7 +10,7 @@ import {
   latestBatchRunFromDb,
   getConnectedUser,
   getConnectedYouTubeCredentials,
-  listProcessedCommentIds,
+  listKnownCommentIds,
   listBatchRunsFromDb,
   listLogsFromDb,
   markCommentProcessed,
@@ -658,12 +658,12 @@ async function rememberProcessedComment({ commentId, videoId, action, status, re
 }
 
 async function filterUnprocessedComments(comments) {
-  const dbProcessedIds = await listProcessedCommentIds();
-  const processedIds = new Set(processedCommentIds);
-  for (const id of dbProcessedIds || []) {
-    processedIds.add(id);
+  const dbKnownIds = await listKnownCommentIds();
+  const knownIds = new Set(processedCommentIds);
+  for (const id of dbKnownIds || []) {
+    knownIds.add(id);
   }
-  return comments.filter((comment) => comment?.id && !processedIds.has(comment.id));
+  return comments.filter((comment) => comment?.id && !knownIds.has(comment.id));
 }
 
 async function createDryRun(comments, meta = {}) {

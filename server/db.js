@@ -447,6 +447,29 @@ export async function listProcessedCommentIds() {
   }
 }
 
+export async function listKnownCommentIds() {
+  const client = await ensureDatabase();
+  if (!client) {
+    return null;
+  }
+
+  try {
+    const { rows } = await client.query(`
+      SELECT comment_id AS "commentId"
+      FROM processed_comments
+      WHERE comment_id IS NOT NULL
+      UNION
+      SELECT external_comment_id AS "commentId"
+      FROM dry_run_results
+      WHERE external_comment_id IS NOT NULL
+    `);
+    return rows.map((row) => row.commentId);
+  } catch (error) {
+    console.error("Failed to list known comment IDs", error);
+    return null;
+  }
+}
+
 export async function persistLog(log) {
   const client = await ensureDatabase();
   if (!client) {
