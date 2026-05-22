@@ -987,6 +987,15 @@ textarea {
   line-height: 1.35;
 }
 
+.run-note {
+  display: grid;
+  gap: 4px;
+}
+
+.run-note .field-note {
+  margin: 0;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

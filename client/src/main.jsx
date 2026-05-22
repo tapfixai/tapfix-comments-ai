@@ -607,9 +607,16 @@ function Comments() {
         </label>
       </section>
       {latestRun && (
-        <p className="field-note">
-          Showing latest {latestRun.source === "youtube" ? "YouTube" : "manual"} run from {new Date(latestRun.createdAt).toLocaleString()}.
-        </p>
+        <div className="run-note">
+          <p className="field-note">
+            Showing latest {latestRun.source === "youtube" ? "YouTube" : "manual"} run from {new Date(latestRun.createdAt).toLocaleString()}.
+          </p>
+          {latestRun.source === "youtube" && (
+            <p className="field-note">
+              Scanned {latestRun.scannedCount ?? "?"}, candidates {latestRun.candidateCount ?? "?"}, creator replies skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0}, returned {latestRun.results?.length ?? 0}. {nextPageToken ? "Next page available." : "No next page."}
+            </p>
+          )}
+        </div>
       )}
       {error && <p className="error-text">{error}</p>}
       <div className={selectedIds.length > 0 ? "bulk-bar" : "bulk-bar empty"}>
