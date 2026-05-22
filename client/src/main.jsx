@@ -553,17 +553,17 @@ function Comments() {
             </label>
             <button
               className="primary-button"
-              onClick={() => fetchNewYouTubeComments({ includeProcessed: true, scanLimit: 100 })}
+              onClick={() => fetchNewYouTubeComments({ includeProcessed: true })}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Fetch unanswered YouTube comments for review by scanning up to 100 latest threads"
+              title="Fetch unanswered YouTube comments for review using the selected load amount"
             >
               <RefreshCw size={16} />
               {isFetchingYouTube ? "Loading from YouTube" : "Load unanswered comments"}
             </button>
             <button
               className="filter-button"
-              onClick={() => fetchNewYouTubeComments({ scanLimit: 100 })}
+              onClick={() => fetchNewYouTubeComments()}
               disabled={isFetchingYouTube || isLoading}
               type="button"
               title="Fetch unanswered comments that have not already been handled"
