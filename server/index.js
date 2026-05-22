@@ -414,6 +414,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
       processedSkippedCount,
       scanLimit,
       includeProcessed,
+      includeThreadsWithReplies,
       nextPageToken: comments.nextPageToken,
     });
 

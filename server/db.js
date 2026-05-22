@@ -53,6 +53,7 @@ async function ensureDatabase() {
         ADD COLUMN IF NOT EXISTS skipped_threads_with_creator_replies INTEGER,
         ADD COLUMN IF NOT EXISTS processed_skipped_count INTEGER,
         ADD COLUMN IF NOT EXISTS include_processed BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS include_threads_with_replies BOOLEAN DEFAULT FALSE,
         ADD COLUMN IF NOT EXISTS scan_limit INTEGER,
         ADD COLUMN IF NOT EXISTS next_page_token TEXT;
 
@@ -144,11 +145,12 @@ export async function persistBatchRun(run) {
           skipped_threads_with_creator_replies,
           processed_skipped_count,
           include_processed,
+          include_threads_with_replies,
           scan_limit,
           next_page_token,
           created_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT (id) DO NOTHING
       `,
       [
@@ -165,6 +167,7 @@ export async function persistBatchRun(run) {
         run.skippedThreadsWithCreatorReplies ?? null,
         run.processedSkippedCount ?? null,
         run.includeProcessed ?? false,
+        run.includeThreadsWithReplies ?? false,
         run.scanLimit ?? null,
         run.nextPageToken ?? null,
         run.createdAt,
@@ -248,6 +251,7 @@ export async function listBatchRunsFromDb(limit = 20) {
           b.skipped_threads_with_creator_replies AS "skippedThreadsWithCreatorReplies",
           b.processed_skipped_count AS "processedSkippedCount",
           b.include_processed AS "includeProcessed",
+          b.include_threads_with_replies AS "includeThreadsWithReplies",
           b.scan_limit AS "scanLimit",
           b.next_page_token AS "nextPageToken",
           COUNT(r.id)::int AS "resultsCount"
@@ -296,6 +300,7 @@ export async function latestBatchRunFromDb(source = null) {
           skipped_threads_with_creator_replies AS "skippedThreadsWithCreatorReplies",
           processed_skipped_count AS "processedSkippedCount",
           include_processed AS "includeProcessed",
+          include_threads_with_replies AS "includeThreadsWithReplies",
           scan_limit AS "scanLimit",
           next_page_token AS "nextPageToken"
         FROM dry_run_batches
@@ -355,6 +360,7 @@ export async function latestBatchRunFromDb(source = null) {
       skippedThreadsWithCreatorReplies: batch.skippedThreadsWithCreatorReplies,
       processedSkippedCount: batch.processedSkippedCount,
       includeProcessed: batch.includeProcessed,
+      includeThreadsWithReplies: batch.includeThreadsWithReplies,
       scanLimit: batch.scanLimit,
       nextPageToken: batch.nextPageToken,
       results: resultsResult.rows.map((result) => ({
