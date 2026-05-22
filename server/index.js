@@ -390,7 +390,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
     });
     const candidateComments = includeThreadsWithReplies
       ? comments
-      : comments.filter((comment) => !comment.replyCount);
+      : comments.filter((comment) => !comment.hasCreatorReply);
     const unprocessedComments = (await filterUnprocessedComments(candidateComments)).slice(0, requestedLimit);
 
     const run = await createDryRun(unprocessedComments, {
@@ -399,7 +399,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
       channelTitle: connectedUser.youtubeChannelTitle,
       scannedCount: comments.length,
       candidateCount: candidateComments.length,
-      skippedThreadsWithReplies: comments.length - candidateComments.length,
+      skippedThreadsWithCreatorReplies: comments.length - candidateComments.length,
       scanLimit,
     });
 
@@ -1272,7 +1272,7 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }
   while (comments.length < maxResults) {
     const remaining = maxResults - comments.length;
     const url = new URL("https://www.googleapis.com/youtube/v3/commentThreads");
-    url.searchParams.set("part", "snippet");
+    url.searchParams.set("part", "snippet,replies");
     url.searchParams.set("allThreadsRelatedToChannelId", channelId);
     url.searchParams.set("maxResults", String(Math.min(100, remaining)));
     url.searchParams.set("order", "time");
@@ -1295,6 +1295,10 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }
         const topLevelComment = item.snippet?.topLevelComment;
         const snippet = topLevelComment?.snippet;
         const text = snippet?.textOriginal || snippet?.textDisplay || "";
+        const replies = item.replies?.comments || [];
+        const hasCreatorReply = replies.some((reply) => (
+          reply.snippet?.authorChannelId?.value === channelId
+        ));
 
         return {
           id: topLevelComment?.id || item.id,
@@ -1302,6 +1306,7 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }
           text,
           authorName: snippet?.authorDisplayName || "Viewer",
           replyCount: Number(item.snippet?.totalReplyCount || 0),
+          hasCreatorReply,
         };
       })
       .filter((comment) => comment.id && comment.text);

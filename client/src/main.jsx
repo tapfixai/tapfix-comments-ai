@@ -40,7 +40,6 @@ function resolveApiUrl() {
 const API_URL = resolveApiUrl();
 const YOUTUBE_WINDOW_TARGET = "tapfix_youtube";
 const MAX_STATUS_MESSAGE_LENGTH = 120;
-const YOUTUBE_COMMENT_SCAN_LIMIT = 100;
 
 function apiFetch(url, options = {}) {
   return fetch(url, {
@@ -335,7 +334,7 @@ function Comments() {
       const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: Math.max(youtubeLimit, YOUTUBE_COMMENT_SCAN_LIMIT) }),
+        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -946,7 +945,7 @@ dm me for collab`);
       const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: Math.max(youtubeLimit, YOUTUBE_COMMENT_SCAN_LIMIT) }),
+        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit }),
       });
       const payload = await response.json();
       if (!response.ok) {
