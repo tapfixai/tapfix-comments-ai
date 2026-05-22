@@ -69,6 +69,8 @@ const batchSchema = z.object({
 
 const youtubeDryRunSchema = z.object({
   maxResults: z.number().int().min(1).max(100).optional(),
+  scanLimit: z.number().int().min(1).max(2000).optional(),
+  includeThreadsWithReplies: z.boolean().optional(),
 }).optional();
 
 const youtubeReplySchema = z.object({
@@ -326,37 +328,30 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
 
   try {
     const accessToken = await getValidYouTubeAccessToken(connectedUser);
-    const requestedLimit = parsed.data?.maxResults || 25;
+    const requestedLimit = parsed.data?.maxResults || 75;
+    const scanLimit = parsed.data?.scanLimit || Math.min(1000, Math.max(250, requestedLimit * 12));
+    const includeThreadsWithReplies = parsed.data?.includeThreadsWithReplies === true;
     const comments = await fetchLatestYouTubeComments({
       accessToken,
       channelId: connectedUser.youtubeChannelId,
-      maxResults: Math.min(500, Math.max(100, requestedLimit * 5)),
+      maxResults: scanLimit,
     });
-    const unprocessedComments = (await filterUnprocessedComments(comments)).slice(0, requestedLimit);
-
-    if (!unprocessedComments.length) {
-      addLog("youtube_dry_run", `No recent YouTube comments found for ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId}`);
-      return {
-        id: crypto.randomUUID(),
-        source: "youtube",
-        channelTitle: connectedUser.youtubeChannelTitle,
-        channelId: connectedUser.youtubeChannelId,
-        createdAt: new Date().toISOString(),
-        total: 0,
-        replies: 0,
-        reviews: 0,
-        deletes: 0,
-        results: [],
-      };
-    }
+    const candidateComments = includeThreadsWithReplies
+      ? comments
+      : comments.filter((comment) => !comment.replyCount);
+    const unprocessedComments = (await filterUnprocessedComments(candidateComments)).slice(0, requestedLimit);
 
     const run = await createDryRun(unprocessedComments, {
       source: "youtube",
       channelId: connectedUser.youtubeChannelId,
       channelTitle: connectedUser.youtubeChannelTitle,
+      scannedCount: comments.length,
+      candidateCount: candidateComments.length,
+      skippedThreadsWithReplies: comments.length - candidateComments.length,
+      scanLimit,
     });
 
-    addLog("youtube_dry_run", `Analyzed ${run.total} YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${comments.length}`);
+    addLog("youtube_dry_run", `Analyzed ${run.total} new YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${comments.length}`);
     return run;
   } catch (error) {
     const statusCode = Number(error.statusCode || 502);
@@ -572,8 +567,11 @@ async function rememberProcessedComment({ commentId, videoId, action, status, re
 
 async function filterUnprocessedComments(comments) {
   const dbProcessedIds = await listProcessedCommentIds();
-  const processedIds = new Set(dbProcessedIds || processedCommentIds);
-  return comments.filter((comment) => !processedIds.has(comment.id) && !comment.replyCount);
+  const processedIds = new Set(processedCommentIds);
+  for (const id of dbProcessedIds || []) {
+    processedIds.add(id);
+  }
+  return comments.filter((comment) => comment?.id && !processedIds.has(comment.id));
 }
 
 async function createDryRun(comments, meta = {}) {

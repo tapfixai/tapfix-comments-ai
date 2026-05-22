@@ -317,7 +317,7 @@ function Comments() {
       const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: 50 }),
+        body: JSON.stringify({ maxResults: 75, scanLimit: 1000 }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -453,6 +453,7 @@ function Comments() {
     { id: "needs_delete", label: "Needs delete", predicate: (item) => isPending(item) && item.action === "delete" },
     { id: "unclear", label: "Unclear", predicate: (item) => isPending(item) && (item.action === "review" || `${item.category || item.smartCategory || ""}`.includes("unclear")) },
     { id: "published", label: "Published", predicate: (item) => getItemStatus(item) === "published" },
+    { id: "deleted", label: "Deleted", predicate: (item) => getItemStatus(item) === "deleted" },
     { id: "skipped", label: "Skipped", predicate: (item) => getItemStatus(item) === "skipped" },
     { id: "all", label: "All", predicate: () => true },
   ];
@@ -823,6 +824,9 @@ function Comments() {
                       >
                         Skip
                       </button>
+                      {!hasYouTubeTarget(item) && isPending(item) && (
+                        <span className="action-note">Test row only. Run YouTube dry run to publish or delete.</span>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -983,7 +987,7 @@ dm me for collab`);
       const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: youtubeLimit }),
+        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: Math.max(250, youtubeLimit * 10) }),
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -1181,6 +1185,9 @@ dm me for collab`);
                         >
                           Skip
                         </button>
+                        {!isYouTubeRun && !isDone && (
+                          <span className="action-note">Dry run only. Load YouTube comments to publish or delete.</span>
+                        )}
                       </div>
                     </td>
                   </tr>

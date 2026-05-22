@@ -764,6 +764,13 @@ td:nth-child(2) {
   min-width: 210px;
 }
 
+.action-note {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .link-stack {
   display: grid;
   gap: 5px;
