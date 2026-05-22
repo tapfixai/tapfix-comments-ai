@@ -317,7 +317,7 @@ function Comments() {
       const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: 75, scanLimit: 1000 }),
+        body: JSON.stringify({ maxResults: 25, scanLimit: 25 }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -911,7 +911,7 @@ dm me for collab`);
   const [error, setError] = useState("");
   const [lastRunAt, setLastRunAt] = useState("");
   const [lastSource, setLastSource] = useState("Manual");
-  const [youtubeLimit, setYoutubeLimit] = useState(50);
+  const [youtubeLimit, setYoutubeLimit] = useState(25);
   const [commentStatuses, setCommentStatuses] = useState({});
 
   async function runBatch() {
@@ -987,7 +987,7 @@ dm me for collab`);
       const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: Math.max(250, youtubeLimit * 10) }),
+        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit }),
       });
       const payload = await response.json();
       if (!response.ok) {

@@ -69,7 +69,7 @@ const batchSchema = z.object({
 
 const youtubeDryRunSchema = z.object({
   maxResults: z.number().int().min(1).max(100).optional(),
-  scanLimit: z.number().int().min(1).max(2000).optional(),
+  scanLimit: z.number().int().min(1).max(100).optional(),
   includeThreadsWithReplies: z.boolean().optional(),
 }).optional();
 
@@ -328,8 +328,8 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
 
   try {
     const accessToken = await getValidYouTubeAccessToken(connectedUser);
-    const requestedLimit = parsed.data?.maxResults || 75;
-    const scanLimit = parsed.data?.scanLimit || Math.min(1000, Math.max(250, requestedLimit * 12));
+    const requestedLimit = parsed.data?.maxResults || 25;
+    const scanLimit = parsed.data?.scanLimit || requestedLimit;
     const includeThreadsWithReplies = parsed.data?.includeThreadsWithReplies === true;
     const comments = await fetchLatestYouTubeComments({
       accessToken,
