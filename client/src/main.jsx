@@ -25,7 +25,19 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8080";
+function resolveApiUrl() {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
+  if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
+    return "http://127.0.0.1:8080";
+  }
+
+  return "https://tapfix-comments-ai-production.up.railway.app";
+}
+
+const API_URL = resolveApiUrl();
 const YOUTUBE_WINDOW_TARGET = "tapfix_youtube";
 const MAX_STATUS_MESSAGE_LENGTH = 120;
 
