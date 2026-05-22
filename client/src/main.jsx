@@ -303,6 +303,7 @@ function Comments() {
   const [nextPageToken, setNextPageToken] = useState("");
   const [includeProcessedLoad, setIncludeProcessedLoad] = useState(false);
   const [includeThreadsWithRepliesLoad, setIncludeThreadsWithRepliesLoad] = useState(false);
+  const [scanLimitLoad, setScanLimitLoad] = useState(25);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingYouTube, setIsFetchingYouTube] = useState(false);
   const [isBulkRunning, setIsBulkRunning] = useState(false);
@@ -323,6 +324,7 @@ function Comments() {
       setNextPageToken(payload.nextPageToken || "");
       setIncludeProcessedLoad(Boolean(payload.includeProcessed));
       setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
+      setScanLimitLoad(payload.scanLimit || youtubeLimit);
       setSelectedIds([]);
       setEditedReplies({});
     } catch (loadError) {
@@ -333,7 +335,7 @@ function Comments() {
     }
   }
 
-  async function fetchNewYouTubeComments({ useNextPage = false, includeProcessed = false, includeThreadsWithReplies = false } = {}) {
+  async function fetchNewYouTubeComments({ useNextPage = false, includeProcessed = false, includeThreadsWithReplies = false, scanLimit = youtubeLimit } = {}) {
     setIsFetchingYouTube(true);
     setError("");
     try {
@@ -341,7 +343,7 @@ function Comments() {
       const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit, pageToken, includeProcessed, includeThreadsWithReplies }),
+        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit, pageToken, includeProcessed, includeThreadsWithReplies }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -361,6 +363,7 @@ function Comments() {
       setNextPageToken(payload.nextPageToken || "");
       setIncludeProcessedLoad(Boolean(payload.includeProcessed));
       setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
+      setScanLimitLoad(payload.scanLimit || scanLimit);
       setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
       if (!useNextPage) {
         setEditedReplies({});
@@ -550,27 +553,27 @@ function Comments() {
             </label>
             <button
               className="primary-button"
-              onClick={() => fetchNewYouTubeComments({ includeProcessed: true, includeThreadsWithReplies: true })}
+              onClick={() => fetchNewYouTubeComments({ includeProcessed: true, scanLimit: 100 })}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Fetch the latest YouTube comments for review without hiding comments already seen by TapFix"
+              title="Fetch unanswered YouTube comments for review by scanning up to 100 latest threads"
             >
               <RefreshCw size={16} />
-              {isFetchingYouTube ? "Loading from YouTube" : "Load latest comments"}
+              {isFetchingYouTube ? "Loading from YouTube" : "Load unanswered comments"}
             </button>
             <button
               className="filter-button"
-              onClick={() => fetchNewYouTubeComments()}
+              onClick={() => fetchNewYouTubeComments({ scanLimit: 100 })}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Fetch only YouTube comments that have not already been handled"
+              title="Fetch unanswered comments that have not already been handled"
             >
               New only
             </button>
             {nextPageToken && (
               <button
                 className="filter-button"
-                onClick={() => fetchNewYouTubeComments({ useNextPage: true, includeProcessed: includeProcessedLoad, includeThreadsWithReplies: includeThreadsWithRepliesLoad })}
+                onClick={() => fetchNewYouTubeComments({ useNextPage: true, includeProcessed: includeProcessedLoad, includeThreadsWithReplies: includeThreadsWithRepliesLoad, scanLimit: scanLimitLoad })}
                 disabled={isFetchingYouTube || isLoading}
                 type="button"
                 title="Load the next YouTube comments page"
