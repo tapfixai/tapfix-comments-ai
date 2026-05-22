@@ -553,22 +553,22 @@ function Comments() {
             </label>
             <button
               className="primary-button"
-              onClick={() => fetchNewYouTubeComments({ includeProcessed: true })}
-              disabled={isFetchingYouTube || isLoading}
-              type="button"
-              title="Fetch unanswered YouTube comments for review using the selected load amount"
-            >
-              <RefreshCw size={16} />
-              {isFetchingYouTube ? "Searching YouTube" : "Find unanswered"}
-            </button>
-            <button
-              className="filter-button"
               onClick={() => fetchNewYouTubeComments()}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Fetch unanswered comments that have not already been handled in TapFix"
+              title="Find unanswered comments TapFix has not shown before"
             >
-              New unanswered only
+              <RefreshCw size={16} />
+              {isFetchingYouTube ? "Searching YouTube" : "Find new unanswered"}
+            </button>
+            <button
+              className="filter-button"
+              onClick={() => fetchNewYouTubeComments({ includeProcessed: true })}
+              disabled={isFetchingYouTube || isLoading}
+              type="button"
+              title="Review unanswered comments that are already saved in the current TapFix queue"
+            >
+              Review saved unanswered
             </button>
             {nextPageToken && (
               <button
@@ -637,7 +637,7 @@ function Comments() {
           </p>
           {latestRun.source === "youtube" && (
             <p className="field-note">
-              Searched {latestRun.scannedCount ?? "?"} latest threads, found {latestRun.candidateCount ?? "?"} unanswered, skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0} already answered by creator, skipped {latestRun.processedSkippedCount ?? 0} already handled in TapFix, showing {latestRun.results?.length ?? 0}. {latestRun.includeProcessed ? "Review queue mode." : latestRun.includeProcessedRequested ? "Waiting for backend deploy." : "New-only mode."} {nextPageToken ? "Next page available." : "No next page."}
+              Searched {latestRun.scannedCount ?? "?"} latest threads, found {latestRun.candidateCount ?? "?"} unanswered, skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0} already answered by creator, skipped {latestRun.processedSkippedCount ?? 0} already seen in TapFix, showing {latestRun.results?.length ?? 0}. {latestRun.includeProcessed ? "Reviewing saved unanswered." : latestRun.includeProcessedRequested ? "Waiting for backend deploy." : "New unanswered only."} {nextPageToken ? "Next page available." : "No next page."}
             </p>
           )}
         </div>
