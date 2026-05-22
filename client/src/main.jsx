@@ -589,6 +589,8 @@ function Comments() {
         <div className="bulk-status">
           <strong>{selectedIds.length} selected</strong>
           {selectedIds.length === 0 && <span className="bulk-hint">Select comments with the checkboxes to use bulk actions.</span>}
+        </div>
+        <div className="bulk-controls">
           <button
             className="mini-action secondary"
             onClick={toggleVisibleSelection}
@@ -598,8 +600,6 @@ function Comments() {
             <CheckSquare size={14} />
             {selectedIds.length === visiblePendingIds.length && selectedIds.length > 0 ? "Clear visible" : "Select visible"}
           </button>
-        </div>
-        <div className="bulk-actions">
           <button
             className="mini-action publish"
             onClick={() => runBulk("reply")}
