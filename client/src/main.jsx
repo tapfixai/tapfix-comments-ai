@@ -543,7 +543,7 @@ function Comments() {
           </div>
           <div className="queue-actions">
             <label className="inline-select">
-              <span>Load</span>
+              <span>Search latest</span>
               <select value={youtubeLimit} onChange={(event) => setYoutubeLimit(Number(event.target.value))}>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -559,16 +559,16 @@ function Comments() {
               title="Fetch unanswered YouTube comments for review using the selected load amount"
             >
               <RefreshCw size={16} />
-              {isFetchingYouTube ? "Loading from YouTube" : "Load unanswered comments"}
+              {isFetchingYouTube ? "Searching YouTube" : "Find unanswered"}
             </button>
             <button
               className="filter-button"
               onClick={() => fetchNewYouTubeComments()}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Fetch unanswered comments that have not already been handled"
+              title="Fetch unanswered comments that have not already been handled in TapFix"
             >
-              New only
+              New unanswered only
             </button>
             {nextPageToken && (
               <button
@@ -576,9 +576,9 @@ function Comments() {
                 onClick={() => fetchNewYouTubeComments({ useNextPage: true, includeProcessed: includeProcessedLoad, includeThreadsWithReplies: includeThreadsWithRepliesLoad, scanLimit: scanLimitLoad })}
                 disabled={isFetchingYouTube || isLoading}
                 type="button"
-                title="Load the next YouTube comments page"
+                title="Search the next page of YouTube comment threads"
               >
-                Load next {youtubeLimit}
+                Search next {youtubeLimit}
               </button>
             )}
             <button
@@ -637,7 +637,7 @@ function Comments() {
           </p>
           {latestRun.source === "youtube" && (
             <p className="field-note">
-              Scanned {latestRun.scannedCount ?? "?"}, candidates {latestRun.candidateCount ?? "?"}, creator replies skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0}, already handled skipped {latestRun.processedSkippedCount ?? 0}, returned {latestRun.results?.length ?? 0}. {latestRun.includeProcessed ? "Reviewing latest again." : latestRun.includeProcessedRequested ? "Waiting for backend deploy." : "New only."} {nextPageToken ? "Next page available." : "No next page."}
+              Searched {latestRun.scannedCount ?? "?"} latest threads, found {latestRun.candidateCount ?? "?"} unanswered, skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0} already answered by creator, skipped {latestRun.processedSkippedCount ?? 0} already handled in TapFix, showing {latestRun.results?.length ?? 0}. {latestRun.includeProcessed ? "Review queue mode." : latestRun.includeProcessedRequested ? "Waiting for backend deploy." : "New-only mode."} {nextPageToken ? "Next page available." : "No next page."}
             </p>
           )}
         </div>
