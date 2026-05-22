@@ -51,14 +51,6 @@ const navItems = [
   { id: "logs", label: "Logs", icon: FileText },
 ];
 
-const demoLogs = [
-  { type: "reply", message: "Published AI reply to c_101", time: "09:13", status: "ok" },
-  { type: "delete", message: "Deleted c_102: link / scam", time: "09:09", status: "ok" },
-  { type: "like", message: "Comment like API returned not_supported", time: "09:03", status: "warning" },
-  { type: "quota", message: "YouTube quota check passed", time: "08:50", status: "ok" },
-  { type: "delete", message: "Deleted c_103: meaningless short comment", time: "08:45", status: "ok" },
-];
-
 const defaultPrompt = `You are replying to comments on my YouTube ASMR channel.
 
 Detect the viewer comment language.
@@ -86,9 +78,10 @@ function App() {
   const [autoLike, setAutoLike] = useState(false);
   const [emoji, setEmoji] = useState(true);
   const [prompt, setPrompt] = useState(defaultPrompt);
-  const [liveLogs, setLiveLogs] = useState(demoLogs);
+  const [liveLogs, setLiveLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState("");
+  const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
   const [stats, setStats] = useState({ processed: 0, deleted: 0, published: 0, errors: 0 });
   const [authStatus, setAuthStatus] = useState({
     googleConfigured: false,
@@ -144,10 +137,19 @@ function App() {
         processed: latestRun.total || latestResults.length,
         deleted: latestResults.filter((item) => item.status === "deleted").length,
         published: latestResults.filter((item) => item.status === "published").length,
-        errors: liveLogs.filter((log) => log.status === "error").length,
+        errors: latestResults.filter((item) => ["error", "failed"].includes(String(item.status || "").toLowerCase())).length,
       });
     } catch (error) {
       console.error("Failed to load stats", error);
+    }
+  };
+
+  const refreshDashboard = async () => {
+    setDashboardRefreshing(true);
+    try {
+      await Promise.all([refreshLogs(), refreshAuthStatus(), refreshStats()]);
+    } finally {
+      setDashboardRefreshing(false);
     }
   };
 
@@ -214,7 +216,13 @@ function App() {
             <h1>{navItems.find((item) => item.id === page)?.label}</h1>
           </div>
           <div className="top-actions">
-            <button className="icon-button" title="Refresh comments" type="button">
+            <button
+              className="icon-button"
+              title={page === "dashboard" ? "Refresh dashboard" : "Refresh dashboard data"}
+              type="button"
+              onClick={refreshDashboard}
+              disabled={dashboardRefreshing}
+            >
               <RefreshCw size={18} />
             </button>
             <button className="primary-button" type="button">
@@ -296,7 +304,7 @@ function Comments() {
       const response = await fetch(`${API_URL}/api/comments/batch-runs/latest?source=youtube`);
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error === "no_batch_runs" ? "No YouTube dry run yet. Run YouTube dry run from Batch Test first." : payload.error || "No saved comments yet");
+        throw new Error(payload.error === "no_batch_runs" ? "No saved YouTube comments yet. Load new YouTube comments first." : payload.error || "No saved comments yet");
       }
       setLatestRun(payload);
       setItems(payload.results || []);
@@ -476,7 +484,11 @@ function Comments() {
     return matchesQueue && haystack.includes(query.trim().toLowerCase());
   });
   const queueCounts = Object.fromEntries(queueTabs.map((tab) => [tab.id, items.filter(tab.predicate).length]));
-  const editableReplyItems = filteredItems.filter((item) => isPending(item) && item.action === "reply");
+  const visiblePendingIds = filteredItems.filter((item) => isPending(item)).map((item) => item.id);
+
+  useEffect(() => {
+    setSelectedIds((current) => current.filter((id) => visiblePendingIds.includes(id)));
+  }, [activeQueue, query, items]);
 
   function toggleSelected(itemId) {
     setSelectedIds((current) => (
@@ -485,13 +497,8 @@ function Comments() {
   }
 
   function toggleVisibleSelection() {
-    const visibleIds = filteredItems.filter((item) => isPending(item)).map((item) => item.id);
-    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
-    setSelectedIds((current) => (
-      allVisibleSelected
-        ? current.filter((id) => !visibleIds.includes(id))
-        : [...new Set([...current, ...visibleIds])]
-    ));
+    const allVisibleSelected = visiblePendingIds.length > 0 && visiblePendingIds.every((id) => selectedIds.includes(id));
+    setSelectedIds(allVisibleSelected ? [] : visiblePendingIds);
   }
 
   return (
@@ -568,91 +575,18 @@ function Comments() {
         </p>
       )}
       {error && <p className="error-text">{error}</p>}
-      {editableReplyItems.length > 0 && (
-        <section className="reply-workspace panel">
-          <div className="reply-workspace-head">
-            <div>
-              <h2>Reply workspace</h2>
-              <p className="field-note">Generated replies are editable. Publish uses the exact text in the editor.</p>
-            </div>
-            <span>{editableReplyItems.length} ready to review</span>
-          </div>
-          <div className="reply-card-grid">
-            {editableReplyItems.map((item) => {
-              const manualStatus = rowStatuses[item.id];
-              const currentStatus = manualStatus?.status || getItemStatus(item);
-              const isWorking = currentStatus === "working";
-              const replyValue = editedReplies[item.id] ?? item.reply ?? "";
-              const selected = selectedIds.includes(item.id);
-
-              return (
-                <article className="reply-review-card" key={`reply-workspace-${item.id}`}>
-                  <div className="reply-card-comment">
-                    <label className="card-select">
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={() => toggleSelected(item.id)}
-                        aria-label={`Select ${item.id}`}
-                      />
-                      Select
-                    </label>
-                    <strong>{item.comment}</strong>
-                    <span>{item.authorName || "Viewer"}</span>
-                    <div className="decision-line">
-                      <LanguageCell language={item.detectedLanguage || item.language} confidence={item.languageConfidence || item.confidence} />
-                      <Badge value={item.smartCategory || item.category} />
-                    </div>
-                  </div>
-                  <div className="reply-card-editor">
-                    <div className="reply-label-row">
-                      <span>Generated reply</span>
-                      <span>{replyValue.length}/120</span>
-                    </div>
-                    <textarea
-                      className="reply-editor prominent"
-                      value={replyValue}
-                      onChange={(event) => setEditedReplies((current) => ({ ...current, [item.id]: event.target.value }))}
-                      placeholder="Edit the reply before publishing"
-                      rows={4}
-                    />
-                    <div className="reply-card-actions">
-                      <button
-                        className="mini-action secondary"
-                        onClick={() => regenerateReply(item)}
-                        disabled={isWorking}
-                        type="button"
-                      >
-                        <Sparkles size={13} />
-                        Regenerate reply
-                      </button>
-                      <button
-                        className="mini-action publish"
-                        onClick={() => runManualAction(item, "reply")}
-                        disabled={!canRunAction(item, "reply") || isWorking}
-                        type="button"
-                      >
-                        Publish edited reply
-                      </button>
-                      <button
-                        className="mini-action"
-                        onClick={() => runManualAction(item, "skip")}
-                        disabled={!isPending(item) || isWorking}
-                        type="button"
-                      >
-                        Skip
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      )}
       <div className={selectedIds.length > 0 ? "bulk-bar" : "bulk-bar empty"}>
         <strong>{selectedIds.length} selected</strong>
         {selectedIds.length === 0 && <span className="bulk-hint">Select comments with the checkboxes to use bulk actions.</span>}
+        <button
+          className="mini-action secondary"
+          onClick={toggleVisibleSelection}
+          disabled={visiblePendingIds.length === 0}
+          type="button"
+        >
+          <CheckSquare size={14} />
+          {selectedIds.length === visiblePendingIds.length && selectedIds.length > 0 ? "Clear visible" : "Select visible"}
+        </button>
         <button
           className="mini-action publish"
           onClick={() => runBulk("reply")}
@@ -683,34 +617,27 @@ function Comments() {
           </button>
         )}
       </div>
-      <div className="table-wrap">
-        <table className="review-table">
-          <thead>
-            <tr>
-              <th className="checkbox-cell">
-                <button className="select-all" onClick={toggleVisibleSelection} type="button" title="Select visible pending">
-                  <CheckSquare size={16} />
-                </button>
-              </th>
-              <th>Comment</th>
-              <th>AI decision</th>
-              <th>Language</th>
-              <th>Video</th>
-              <th>Reply / action</th>
-              <th>Manual</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredItems.map((item) => {
-              const manualStatus = rowStatuses[item.id];
-              const currentStatus = manualStatus?.status || getItemStatus(item);
-              const isWorking = currentStatus === "working";
-              const replyValue = editedReplies[item.id] ?? item.reply ?? "";
-              const selected = selectedIds.includes(item.id);
+      <section className="reply-workspace panel">
+        <div className="reply-workspace-head">
+          <div>
+            <h2>Review queue</h2>
+            <p className="field-note">Edit generated replies, publish approved text, or delete and skip comments from one place.</p>
+          </div>
+          <span>{filteredItems.length} visible</span>
+        </div>
+        <div className="reply-card-grid">
+          {filteredItems.map((item) => {
+            const manualStatus = rowStatuses[item.id];
+            const currentStatus = manualStatus?.status || getItemStatus(item);
+            const isWorking = currentStatus === "working";
+            const replyValue = editedReplies[item.id] ?? item.reply ?? "";
+            const selected = selectedIds.includes(item.id);
+            const canEditReply = item.action === "reply" || currentStatus === "published";
 
-              return (
-                <tr key={item.id}>
-                  <td className="checkbox-cell">
+            return (
+              <article className="reply-review-card" key={item.id}>
+                <div className="reply-card-comment">
+                  <label className="card-select">
                     <input
                       type="checkbox"
                       checked={selected}
@@ -718,85 +645,74 @@ function Comments() {
                       onChange={() => toggleSelected(item.id)}
                       aria-label={`Select ${item.id}`}
                     />
-                  </td>
-                  <td>
-                    <div className="comment-cell">
-                      <strong>{item.comment}</strong>
-                      <span>{item.authorName || "Viewer"}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="decision-stack">
-                      <div className="decision-line">
-                        <StatusPill status={item.action} />
-                        <Badge value={item.smartCategory || item.category} />
-                      </div>
-                      <p>{item.decisionReason || fallbackDecisionReason(item)}</p>
-                    </div>
-                  </td>
-                  <td>
+                    Select
+                  </label>
+                  <strong>{item.comment}</strong>
+                  <span>{item.authorName || "Viewer"}</span>
+                  <div className="decision-line">
+                    <StatusPill status={item.action} />
+                    <Badge value={item.smartCategory || item.category} />
                     <LanguageCell language={item.detectedLanguage || item.language} confidence={item.languageConfidence || item.confidence} />
-                  </td>
-                  <td>
-                    <div className="link-stack">
-                      <span>{item.video || item.videoId || "unknown-video"}</span>
-                      {item.videoUrl && <a href={item.videoUrl} target={YOUTUBE_WINDOW_TARGET}>Open video</a>}
-                      {item.commentUrl && <a href={item.commentUrl} target={YOUTUBE_WINDOW_TARGET}>Open comment</a>}
-                      {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target={YOUTUBE_WINDOW_TARGET}>Open in Studio</a>}
-                      <button className="link-button" onClick={() => copyCommentReference(item)} type="button">
-                        Copy ref
-                      </button>
+                  </div>
+                  <p className="decision-reason">{item.decisionReason || fallbackDecisionReason(item)}</p>
+                  <div className="link-stack compact-links">
+                    <span>{item.video || item.videoId || "unknown-video"}</span>
+                    {item.videoUrl && <a href={item.videoUrl} target={YOUTUBE_WINDOW_TARGET}>Open video</a>}
+                    {item.commentUrl && <a href={item.commentUrl} target={YOUTUBE_WINDOW_TARGET}>Open comment</a>}
+                    {item.studioCommentsUrl && <a href={item.studioCommentsUrl} target={YOUTUBE_WINDOW_TARGET}>Open in Studio</a>}
+                    <button className="link-button" onClick={() => copyCommentReference(item)} type="button">
+                      Copy ref
+                    </button>
+                  </div>
+                </div>
+                <div className="reply-card-editor">
+                  <div className="reply-label-row">
+                    <span>{canEditReply ? "Generated reply" : "Recommended action"}</span>
+                    {canEditReply && <span>{replyValue.length}/120</span>}
+                  </div>
+                  {canEditReply ? (
+                    <>
+                      <textarea
+                        className="reply-editor prominent"
+                        value={replyValue}
+                        onChange={(event) => setEditedReplies((current) => ({ ...current, [item.id]: event.target.value }))}
+                        placeholder="Edit the reply before publishing"
+                        rows={4}
+                      />
+                      <div className="reply-meta">
+                        <span>Publish uses this exact text</span>
+                        <span>{item.replySource === "openai" ? "GPT" : item.replySource || "draft"}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="delete-decision">
+                      <strong>{item.action === "delete" ? "DELETE" : "REVIEW"}</strong>
+                      <span>{item.action === "delete" ? "No reply will be published for this comment." : "AI was unsure. Skip it or handle manually."}</span>
                     </div>
-                  </td>
-                  <td>
-                    {item.action === "reply" || currentStatus === "published" ? (
-                      <div className="reply-cell generated-reply">
-                        <div className="reply-label-row">
-                          <span>Generated reply</span>
-                          <button
-                            className="mini-action secondary"
-                            onClick={() => regenerateReply(item)}
-                            disabled={isWorking}
-                            type="button"
-                          >
-                            <Sparkles size={13} />
-                            Regenerate reply
-                          </button>
-                        </div>
-                        <textarea
-                          className="reply-editor"
-                          value={replyValue}
-                          onChange={(event) => setEditedReplies((current) => ({ ...current, [item.id]: event.target.value }))}
-                          placeholder="Edit the reply before publishing"
-                          rows={3}
-                        />
-                        <div className="reply-meta">
-                          <span>Edit before publish</span>
-                          <span>{item.replySource === "openai" ? "GPT" : item.replySource || "draft"}</span>
-                          <span>{replyValue.length}/120</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="delete-decision">
-                        <strong>DELETE</strong>
-                        <span>No reply will be published for this comment.</span>
-                      </div>
+                  )}
+                  <div className="reply-card-actions">
+                    <StatusPill status={currentStatus}>{manualStatus?.message || currentStatus}</StatusPill>
+                    {manualStatus?.url && (
+                      <a className="mini-link" href={manualStatus.url} target={YOUTUBE_WINDOW_TARGET}>
+                        View result
+                      </a>
                     )}
-                  </td>
-                  <td>
-                    <div className="manual-actions">
-                      <StatusPill status={currentStatus}>{manualStatus?.message || currentStatus}</StatusPill>
-                      {manualStatus?.url && (
-                        <a className="mini-link" href={manualStatus.url} target={YOUTUBE_WINDOW_TARGET}>
-                          View result
-                        </a>
-                      )}
-                      {manualStatus?.studioUrl && (
-                        <a className="mini-link" href={manualStatus.studioUrl} target={YOUTUBE_WINDOW_TARGET}>
-                          Studio
-                        </a>
-                      )}
-                      {(item.action === "reply" || currentStatus === "published") && (
+                    {manualStatus?.studioUrl && (
+                      <a className="mini-link" href={manualStatus.studioUrl} target={YOUTUBE_WINDOW_TARGET}>
+                        Studio
+                      </a>
+                    )}
+                    {canEditReply && (
+                      <>
+                        <button
+                          className="mini-action secondary"
+                          onClick={() => regenerateReply(item)}
+                          disabled={isWorking}
+                          type="button"
+                        >
+                          <Sparkles size={13} />
+                          Regenerate reply
+                        </button>
                         <button
                           className="mini-action publish"
                           onClick={() => runManualAction(item, "reply")}
@@ -805,41 +721,41 @@ function Comments() {
                         >
                           Publish edited reply
                         </button>
-                      )}
-                      {item.action === "delete" && (
-                        <button
-                          className="mini-action delete"
-                          onClick={() => runManualAction(item, "delete")}
-                          disabled={!canRunAction(item, "delete") || isWorking}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      )}
+                      </>
+                    )}
+                    {item.action === "delete" && (
                       <button
-                        className="mini-action"
-                        onClick={() => runManualAction(item, "skip")}
-                        disabled={!isPending(item) || isWorking}
+                        className="mini-action delete"
+                        onClick={() => runManualAction(item, "delete")}
+                        disabled={!canRunAction(item, "delete") || isWorking}
                         type="button"
                       >
-                        Skip
+                        Delete
                       </button>
-                      {!hasYouTubeTarget(item) && isPending(item) && (
-                        <span className="action-note">Test row only. Run YouTube dry run to publish or delete.</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {!filteredItems.length && (
-              <tr>
-                <td colSpan={7}>{isLoading ? "Loading comments..." : "No comments in this queue. Run YouTube dry run or switch tabs."}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    )}
+                    <button
+                      className="mini-action"
+                      onClick={() => runManualAction(item, "skip")}
+                      disabled={!isPending(item) || isWorking}
+                      type="button"
+                    >
+                      Skip
+                    </button>
+                    {!hasYouTubeTarget(item) && isPending(item) && (
+                      <span className="action-note">Test row only. Load YouTube comments to publish or delete.</span>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+          {!filteredItems.length && (
+            <div className="empty-state">
+              {isLoading ? "Loading comments..." : "No comments in this queue. Load YouTube comments or switch tabs."}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -991,7 +907,7 @@ dm me for collab`);
       });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.message || payload.error || "YouTube dry run failed");
+        throw new Error(payload.message || payload.error || "YouTube comment load failed");
       }
       setResults(payload.results || []);
       setCommentStatuses({});
@@ -1007,7 +923,7 @@ dm me for collab`);
 
   async function runManualAction(item, action) {
     if (lastSource !== "YouTube") {
-      setError("Manual actions work only with YouTube dry runs");
+      setError("Manual actions work only with loaded YouTube comments");
       return;
     }
 
@@ -1082,7 +998,7 @@ dm me for collab`);
             </button>
             <button className="filter-button" onClick={runYouTubeDryRun} disabled={isRunning} type="button">
               <Video size={18} />
-              YouTube dry run
+              Load YouTube comments
             </button>
             <label className="inline-select">
               <span>Latest</span>
@@ -1102,7 +1018,7 @@ dm me for collab`);
           <StatusRow label="Deletes" value={deleteCount} />
           <StatusRow label="Last run" value={lastRunAt ? new Date(lastRunAt).toLocaleString() : "Not loaded"} />
           <StatusRow label="Source" value={lastSource} />
-          <StatusRow label="Mode" value={lastSource === "YouTube" ? "Manual approve" : "Dry run only"} />
+          <StatusRow label="Mode" value={lastSource === "YouTube" ? "Manual approve" : "Preview only"} />
         </Panel>
       </section>
       {results.length > 0 && (
@@ -1186,7 +1102,7 @@ dm me for collab`);
                           Skip
                         </button>
                         {!isYouTubeRun && !isDone && (
-                          <span className="action-note">Dry run only. Load YouTube comments to publish or delete.</span>
+                          <span className="action-note">Preview only. Load YouTube comments to publish or delete.</span>
                         )}
                       </div>
                     </td>
@@ -1330,7 +1246,7 @@ function Insights() {
               </div>
             </div>
           ))}
-          {!insights?.contentIdeas?.length && <p className="field-note">No content ideas yet. Run more YouTube dry runs first.</p>}
+          {!insights?.contentIdeas?.length && <p className="field-note">No content ideas yet. Load more YouTube comments first.</p>}
         </div>
       </Panel>
       <Panel title="Quota Guard">
@@ -1379,14 +1295,17 @@ function languageModeSummary(languageMode) {
 }
 
 function SafetySettings() {
+  const [autoDeleteMode, setAutoDeleteMode] = useState("Review First");
+  const [autoReplyMode, setAutoReplyMode] = useState("Manual Approve");
+
   return (
     <div className="settings-grid">
       <Panel title="Auto Delete">
-        <Segmented options={["Off", "Review First", "Auto Delete"]} active="Auto Delete" />
+        <Segmented options={["Off", "Review First", "Auto Delete"]} active={autoDeleteMode} onChange={setAutoDeleteMode} />
         <Checklist items={["Hate and aggression", "Sexual content", "Spam and scams", "Links", "Duplicates", "Meaningless short comments"]} />
       </Panel>
       <Panel title="Auto Reply">
-        <Segmented options={["Off", "Manual Approve", "Full Auto"]} active="Full Auto" />
+        <Segmented options={["Off", "Manual Approve", "Full Auto"]} active={autoReplyMode} onChange={setAutoReplyMode} />
         <Checklist items={["Reply in commenter language", "Fallback to English when unclear", "No links", "No duplicate replies", "No advertising", "No NSFW replies", "Under 120 characters"]} />
       </Panel>
     </div>
@@ -1492,11 +1411,18 @@ function Select({ label, options, value, onChange }) {
   );
 }
 
-function Segmented({ options, active }) {
+function Segmented({ options, active, onChange }) {
   return (
     <div className="segmented">
       {options.map((option) => (
-        <button key={option} className={option === active ? "selected" : ""} type="button">{option}</button>
+        <button
+          key={option}
+          className={option === active ? "selected" : ""}
+          onClick={() => onChange?.(option)}
+          type="button"
+        >
+          {option}
+        </button>
       ))}
     </div>
   );
@@ -1516,6 +1442,10 @@ function Checklist({ items }) {
 }
 
 function ActionList({ logs, compact = false }) {
+  if (!logs.length) {
+    return <p className="field-note">No backend actions yet.</p>;
+  }
+
   return (
     <div className={compact ? "action-list compact" : "action-list"}>
       {logs.map((log) => (

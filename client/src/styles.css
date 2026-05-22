@@ -567,7 +567,7 @@ td:nth-child(2) {
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--surface-soft);
+  background: var(--surface-muted);
 }
 
 .reply-label-row {
@@ -692,6 +692,18 @@ td:nth-child(2) {
 .reply-card-comment > span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.decision-reason {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.compact-links {
+  grid-template-columns: repeat(auto-fit, minmax(92px, max-content));
+  align-items: center;
+  column-gap: 12px;
 }
 
 .card-select {
@@ -860,6 +872,12 @@ td:nth-child(2) {
 .delete-decision {
   display: grid;
   gap: 6px;
+  min-height: 108px;
+  align-content: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
 }
 
 .delete-decision span {
@@ -986,6 +1004,15 @@ textarea {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow);
+}
+
+.empty-state {
+  padding: 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .checklist {
