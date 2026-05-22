@@ -355,7 +355,7 @@ function Comments() {
       });
       const nextItems = useNextPage ? mergeCommentItems(items, payload.results || []) : payload.results || [];
       setItems(nextItems);
-      setActiveQueue(getBestQueueForItems(nextItems, activeQueue));
+      setActiveQueue("all");
       setNextPageToken(payload.nextPageToken || "");
       setIncludeProcessedLoad(Boolean(payload.includeProcessed));
       setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
@@ -547,22 +547,22 @@ function Comments() {
             </label>
             <button
               className="primary-button"
-              onClick={() => fetchNewYouTubeComments()}
-              disabled={isFetchingYouTube || isLoading}
-              type="button"
-              title="Fetch fresh YouTube comments that have not already been handled"
-            >
-              <RefreshCw size={16} />
-              {isFetchingYouTube ? "Loading from YouTube" : "Load new only"}
-            </button>
-            <button
-              className="filter-button"
               onClick={() => fetchNewYouTubeComments({ includeProcessed: true })}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Review the latest YouTube comments again, including comments already saved or handled"
+              title="Fetch the latest YouTube comments for review without hiding comments already seen by TapFix"
             >
-              Review latest again
+              <RefreshCw size={16} />
+              {isFetchingYouTube ? "Loading from YouTube" : "Load latest comments"}
+            </button>
+            <button
+              className="filter-button"
+              onClick={() => fetchNewYouTubeComments()}
+              disabled={isFetchingYouTube || isLoading}
+              type="button"
+              title="Fetch only YouTube comments that have not already been handled"
+            >
+              New only
             </button>
             {nextPageToken && (
               <button
