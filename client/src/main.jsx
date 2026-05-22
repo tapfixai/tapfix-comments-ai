@@ -301,6 +301,7 @@ function Comments() {
   const [voiceProfile, setVoiceProfile] = useState("Warm, calm ASMR creator. Short replies, no sales.");
   const [youtubeLimit, setYoutubeLimit] = useState(25);
   const [nextPageToken, setNextPageToken] = useState("");
+  const [includeProcessedLoad, setIncludeProcessedLoad] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingYouTube, setIsFetchingYouTube] = useState(false);
   const [isBulkRunning, setIsBulkRunning] = useState(false);
@@ -319,6 +320,7 @@ function Comments() {
       setItems(payload.results || []);
       setActiveQueue(getBestQueueForItems(payload.results || [], activeQueue));
       setNextPageToken(payload.nextPageToken || "");
+      setIncludeProcessedLoad(Boolean(payload.includeProcessed));
       setSelectedIds([]);
       setEditedReplies({});
     } catch (loadError) {
@@ -329,7 +331,7 @@ function Comments() {
     }
   }
 
-  async function fetchNewYouTubeComments({ useNextPage = false } = {}) {
+  async function fetchNewYouTubeComments({ useNextPage = false, includeProcessed = false } = {}) {
     setIsFetchingYouTube(true);
     setError("");
     try {
@@ -337,7 +339,7 @@ function Comments() {
       const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit, pageToken }),
+        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit, pageToken, includeProcessed }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -349,6 +351,7 @@ function Comments() {
       setItems(nextItems);
       setActiveQueue(getBestQueueForItems(nextItems, activeQueue));
       setNextPageToken(payload.nextPageToken || "");
+      setIncludeProcessedLoad(Boolean(payload.includeProcessed));
       setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
       if (!useNextPage) {
         setEditedReplies({});
@@ -541,15 +544,24 @@ function Comments() {
               onClick={() => fetchNewYouTubeComments()}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Fetch fresh comments from YouTube and analyze them"
+              title="Fetch fresh YouTube comments that have not already been handled"
             >
               <RefreshCw size={16} />
-              {isFetchingYouTube ? "Loading from YouTube" : "Load new YouTube comments"}
+              {isFetchingYouTube ? "Loading from YouTube" : "Load new only"}
+            </button>
+            <button
+              className="filter-button"
+              onClick={() => fetchNewYouTubeComments({ includeProcessed: true })}
+              disabled={isFetchingYouTube || isLoading}
+              type="button"
+              title="Review the latest YouTube comments again, including comments already saved or handled"
+            >
+              Review latest again
             </button>
             {nextPageToken && (
               <button
                 className="filter-button"
-                onClick={() => fetchNewYouTubeComments({ useNextPage: true })}
+                onClick={() => fetchNewYouTubeComments({ useNextPage: true, includeProcessed: includeProcessedLoad })}
                 disabled={isFetchingYouTube || isLoading}
                 type="button"
                 title="Load the next YouTube comments page"
@@ -613,7 +625,7 @@ function Comments() {
           </p>
           {latestRun.source === "youtube" && (
             <p className="field-note">
-              Scanned {latestRun.scannedCount ?? "?"}, candidates {latestRun.candidateCount ?? "?"}, creator replies skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0}, returned {latestRun.results?.length ?? 0}. {nextPageToken ? "Next page available." : "No next page."}
+              Scanned {latestRun.scannedCount ?? "?"}, candidates {latestRun.candidateCount ?? "?"}, creator replies skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0}, already handled skipped {latestRun.processedSkippedCount ?? 0}, returned {latestRun.results?.length ?? 0}. {latestRun.includeProcessed ? "Reviewing latest again." : "New only."} {nextPageToken ? "Next page available." : "No next page."}
             </p>
           )}
         </div>

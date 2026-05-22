@@ -75,6 +75,7 @@ const youtubeDryRunSchema = z.object({
   maxResults: z.number().int().min(1).max(100).optional(),
   scanLimit: z.number().int().min(1).max(100).optional(),
   includeThreadsWithReplies: z.boolean().optional(),
+  includeProcessed: z.boolean().optional(),
   pageToken: z.string().optional(),
 }).optional();
 
@@ -384,6 +385,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
     const requestedLimit = parsed.data?.maxResults || 25;
     const scanLimit = parsed.data?.scanLimit || requestedLimit;
     const includeThreadsWithReplies = parsed.data?.includeThreadsWithReplies === true;
+    const includeProcessed = parsed.data?.includeProcessed === true;
     const comments = await fetchLatestYouTubeComments({
       accessToken,
       channelId: connectedUser.youtubeChannelId,
@@ -394,20 +396,27 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
     const candidateComments = includeThreadsWithReplies
       ? scannedComments
       : scannedComments.filter((comment) => !comment.hasCreatorReply);
-    const unprocessedComments = (await filterUnprocessedComments(candidateComments)).slice(0, requestedLimit);
+    const reviewComments = includeProcessed
+      ? candidateComments.slice(0, requestedLimit)
+      : (await filterUnprocessedComments(candidateComments)).slice(0, requestedLimit);
+    const processedSkippedCount = includeProcessed
+      ? 0
+      : Math.max(candidateComments.length - reviewComments.length, 0);
 
-    const run = await createDryRun(unprocessedComments, {
+    const run = await createDryRun(reviewComments, {
       source: "youtube",
       channelId: connectedUser.youtubeChannelId,
       channelTitle: connectedUser.youtubeChannelTitle,
       scannedCount: scannedComments.length,
       candidateCount: candidateComments.length,
       skippedThreadsWithCreatorReplies: scannedComments.length - candidateComments.length,
+      processedSkippedCount,
       scanLimit,
+      includeProcessed,
       nextPageToken: comments.nextPageToken,
     });
 
-    addLog("youtube_dry_run", `Analyzed ${run.total} new YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${scannedComments.length}`);
+    addLog("youtube_dry_run", `Analyzed ${run.total} ${includeProcessed ? "latest" : "new"} YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${scannedComments.length}`);
     return run;
   } catch (error) {
     const statusCode = Number(error.statusCode || 502);
