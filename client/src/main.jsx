@@ -41,6 +41,13 @@ const API_URL = resolveApiUrl();
 const YOUTUBE_WINDOW_TARGET = "tapfix_youtube";
 const MAX_STATUS_MESSAGE_LENGTH = 120;
 
+function apiFetch(url, options = {}) {
+  return fetch(url, {
+    credentials: "include",
+    ...options,
+  });
+}
+
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Gauge },
   { id: "comments", label: "Review Queue", icon: MessageSquareText },
@@ -94,7 +101,7 @@ function App() {
     setLogsLoading(true);
     setLogsError("");
     try {
-      const response = await fetch(`${API_URL}/api/logs`);
+      const response = await apiFetch(`${API_URL}/api/logs`);
       if (!response.ok) {
         throw new Error(`Logs request failed: ${response.status}`);
       }
@@ -115,7 +122,7 @@ function App() {
 
   const refreshAuthStatus = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/auth/status`);
+      const response = await apiFetch(`${API_URL}/api/auth/status`);
       if (response.ok) {
         setAuthStatus(await response.json());
       }
@@ -126,7 +133,7 @@ function App() {
 
   const refreshStats = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/comments/batch-runs/latest`);
+      const response = await apiFetch(`${API_URL}/api/comments/batch-runs/latest`);
       if (!response.ok) {
         return;
       }
@@ -302,13 +309,14 @@ function Comments() {
     setIsLoading(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/comments/batch-runs/latest?source=youtube`);
+      const response = await apiFetch(`${API_URL}/api/comments/batch-runs/latest?source=youtube`);
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.error === "no_batch_runs" ? "No saved YouTube comments yet. Load new YouTube comments first." : payload.error || "No saved comments yet");
       }
       setLatestRun(payload);
       setItems(payload.results || []);
+      setActiveQueue(getBestQueueForItems(payload.results || [], activeQueue));
       setSelectedIds([]);
       setEditedReplies({});
     } catch (loadError) {
@@ -323,7 +331,7 @@ function Comments() {
     setIsFetchingYouTube(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
+      const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit }),
@@ -335,6 +343,7 @@ function Comments() {
 
       setLatestRun(payload);
       setItems(payload.results || []);
+      setActiveQueue(getBestQueueForItems(payload.results || [], activeQueue));
       setSelectedIds([]);
       setEditedReplies({});
       setRowStatuses({});
@@ -356,7 +365,7 @@ function Comments() {
     }));
 
     try {
-      const response = await fetch(`${API_URL}/api/youtube/comments/${encodeURIComponent(item.id)}/${action}`, {
+      const response = await apiFetch(`${API_URL}/api/youtube/comments/${encodeURIComponent(item.id)}/${action}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: action === "reply"
@@ -405,7 +414,7 @@ function Comments() {
       const usedReplies = items
         .map((candidate) => editedReplies[candidate.id] ?? candidate.reply)
         .filter(Boolean);
-      const response = await fetch(`${API_URL}/api/comments/regenerate-reply`, {
+      const response = await apiFetch(`${API_URL}/api/comments/regenerate-reply`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -806,6 +815,25 @@ function canRunAction(item, action) {
   return true;
 }
 
+function getBestQueueForItems(items, currentQueue) {
+  const queuePredicates = {
+    needs_reply: (item) => isPending(item) && item.action === "reply",
+    needs_delete: (item) => isPending(item) && item.action === "delete",
+    unclear: (item) => isPending(item) && (item.action === "review" || `${item.category || item.smartCategory || ""}`.includes("unclear")),
+    published: (item) => getItemStatus(item) === "published",
+    deleted: (item) => getItemStatus(item) === "deleted",
+    skipped: (item) => getItemStatus(item) === "skipped",
+    all: () => true,
+  };
+  const currentPredicate = queuePredicates[currentQueue];
+  if (currentPredicate && items.some(currentPredicate)) {
+    return currentQueue;
+  }
+
+  return ["needs_reply", "needs_delete", "unclear", "published", "deleted", "skipped", "all"]
+    .find((queueId) => items.some(queuePredicates[queueId])) || currentQueue;
+}
+
 function fallbackDecisionReason(item) {
   if (item.action === "delete") {
     return `Safety filter marked this as ${item.category || "unsafe"}.`;
@@ -859,7 +887,7 @@ dm me for collab`);
     setIsRunning(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/comments/analyze-batch`, {
+      const response = await apiFetch(`${API_URL}/api/comments/analyze-batch`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ comments: commentsToAnalyze }),
@@ -884,7 +912,7 @@ dm me for collab`);
     setIsRunning(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/comments/batch-runs/latest`);
+      const response = await apiFetch(`${API_URL}/api/comments/batch-runs/latest`);
       const payload = await response.json();
       if (!response.ok) {
         const cached = window.localStorage.getItem("tapfix:lastBatchRun");
@@ -914,7 +942,7 @@ dm me for collab`);
     setIsRunning(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
+      const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit }),
@@ -948,7 +976,7 @@ dm me for collab`);
     }));
 
     try {
-      const response = await fetch(`${API_URL}/api/youtube/comments/${encodeURIComponent(item.id)}/${action}`, {
+      const response = await apiFetch(`${API_URL}/api/youtube/comments/${encodeURIComponent(item.id)}/${action}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: action === "reply" ? JSON.stringify({ reply: item.reply }) : JSON.stringify({ videoId: item.videoId }),
@@ -1190,7 +1218,7 @@ function Insights() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/insights`);
+      const response = await apiFetch(`${API_URL}/api/insights`);
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.error || "Failed to load insights");

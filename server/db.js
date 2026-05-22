@@ -499,14 +499,20 @@ export async function upsertConnectedUser(user) {
   }
 }
 
-export async function getConnectedUser() {
+export async function getConnectedUser(userId = null) {
   const client = await ensureDatabase();
   if (!client) {
     return null;
   }
 
   try {
-    const { rows } = await client.query(`
+    const { rows } = userId ? await client.query(`
+      SELECT id, google_email AS "googleEmail", youtube_channel_id AS "youtubeChannelId",
+        youtube_channel_title AS "youtubeChannelTitle", created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM users
+      WHERE id = $1 AND refresh_token IS NOT NULL
+      LIMIT 1
+    `, [userId]) : await client.query(`
       SELECT id, google_email AS "googleEmail", youtube_channel_id AS "youtubeChannelId",
         youtube_channel_title AS "youtubeChannelTitle", created_at AS "createdAt", updated_at AS "updatedAt"
       FROM users
@@ -530,14 +536,26 @@ export async function getConnectedUser() {
   }
 }
 
-export async function getConnectedYouTubeCredentials() {
+export async function getConnectedYouTubeCredentials(userId = null) {
   const client = await ensureDatabase();
   if (!client) {
     return null;
   }
 
   try {
-    const { rows } = await client.query(`
+    const { rows } = userId ? await client.query(`
+      SELECT
+        id,
+        google_email AS "googleEmail",
+        youtube_channel_id AS "youtubeChannelId",
+        youtube_channel_title AS "youtubeChannelTitle",
+        access_token AS "accessToken",
+        refresh_token AS "refreshToken",
+        token_expiry AS "tokenExpiry"
+      FROM users
+      WHERE id = $1 AND refresh_token IS NOT NULL
+      LIMIT 1
+    `, [userId]) : await client.query(`
       SELECT
         id,
         google_email AS "googleEmail",

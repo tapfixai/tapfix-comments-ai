@@ -1,4 +1,5 @@
 import "dotenv/config";
+import nodeCrypto from "node:crypto";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
@@ -25,6 +26,7 @@ const host = process.env.HOST || "0.0.0.0";
 
 await server.register(cors, {
   origin: process.env.WEB_ORIGIN || "http://127.0.0.1:5173",
+  credentials: true,
 });
 
 await server.register(rateLimit, {
@@ -49,6 +51,8 @@ const settings = {
 const logs = [];
 const batchRuns = [];
 const processedCommentIds = new Set();
+const SESSION_COOKIE_NAME = "tapfix_session";
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const googleScopes = [
   "openid",
   "email",
@@ -100,7 +104,8 @@ server.get("/", async () => ({
 }));
 
 server.get("/api/auth/status", async (request) => {
-  const connectedUser = await getConnectedUser();
+  const sessionUserId = getSessionUserId(request);
+  const connectedUser = sessionUserId ? await getConnectedUser(sessionUserId) : null;
   return {
     googleConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     connected: Boolean(connectedUser),
@@ -169,8 +174,12 @@ server.get("/auth/google/callback", async (request, reply) => {
       refreshToken: tokens.refresh_token,
       tokenExpiry: new Date(Date.now() + Number(tokens.expires_in || 3600) * 1000).toISOString(),
     });
+    if (!connectedUser?.id) {
+      throw new Error("connected_user_save_failed");
+    }
 
     addLog("oauth", `Connected YouTube channel ${channel.title || channel.id}`);
+    setSessionCookie(reply, connectedUser.id);
     return reply.redirect(`${getPanelUrl()}?youtube=connected&channel=${encodeURIComponent(connectedUser?.youtubeChannelTitle || channel.title || channel.id)}`);
   } catch (error) {
     console.error("Google OAuth callback failed", error);
@@ -179,15 +188,29 @@ server.get("/auth/google/callback", async (request, reply) => {
   }
 });
 
-server.get("/api/settings", async () => settings);
+server.get("/api/settings", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
 
-server.patch("/api/settings", async (request) => {
+  return settings;
+});
+
+server.patch("/api/settings", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   Object.assign(settings, request.body);
   addLog("settings", "Settings updated");
   return settings;
 });
 
-server.get("/api/logs", async () => {
+server.get("/api/logs", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   const dbLogs = await listLogsFromDb();
   if (dbLogs) {
     return dbLogs;
@@ -196,7 +219,11 @@ server.get("/api/logs", async () => {
   return logs.slice(-100).reverse();
 });
 
-server.get("/api/comments/batch-runs", async () => {
+server.get("/api/comments/batch-runs", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   const dbRuns = await listBatchRunsFromDb();
   if (dbRuns) {
     return dbRuns.map((run) => ({
@@ -220,6 +247,10 @@ server.get("/api/comments/batch-runs", async () => {
 });
 
 server.get("/api/comments/batch-runs/latest", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   const requestedSource = request.query?.source;
   const source = requestedSource === "youtube" || requestedSource === "manual" ? requestedSource : null;
   const dbLatest = await latestBatchRunFromDb(source);
@@ -236,13 +267,21 @@ server.get("/api/comments/batch-runs/latest", async (request, reply) => {
   return latest;
 });
 
-server.get("/api/insights", async () => {
+server.get("/api/insights", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   const latestRun = await latestBatchRunFromDb();
   const results = latestRun?.results || batchRuns.at(-1)?.results || [];
   return buildCommentInsights(results, latestRun);
 });
 
 server.post("/api/comments/regenerate-reply", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   const parsed = regenerateReplySchema.safeParse(request.body);
   if (!parsed.success) {
     return reply.code(400).send({ error: "invalid_regenerate_request", details: parsed.error.flatten() });
@@ -294,6 +333,10 @@ server.post("/api/comments/regenerate-reply", async (request, reply) => {
 });
 
 server.post("/api/comments/analyze", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   const parsed = commentSchema.safeParse(request.body);
   if (!parsed.success) {
     return reply.code(400).send({ error: "invalid_comment", details: parsed.error.flatten() });
@@ -305,6 +348,10 @@ server.post("/api/comments/analyze", async (request, reply) => {
 });
 
 server.post("/api/comments/analyze-batch", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   const parsed = batchSchema.safeParse(request.body);
   if (!parsed.success) {
     return reply.code(400).send({ error: "invalid_batch", details: parsed.error.flatten() });
@@ -316,12 +363,17 @@ server.post("/api/comments/analyze-batch", async (request, reply) => {
 });
 
 server.post("/api/youtube/comments/dry-run", async (request, reply) => {
+  const sessionUser = await requireSession(request, reply);
+  if (!sessionUser) {
+    return reply;
+  }
+
   const parsed = youtubeDryRunSchema.safeParse(request.body || {});
   if (!parsed.success) {
     return reply.code(400).send({ error: "invalid_youtube_dry_run", details: parsed.error.flatten() });
   }
 
-  const connectedUser = await getConnectedYouTubeCredentials();
+  const connectedUser = await getConnectedYouTubeCredentials(sessionUser.id);
   if (!connectedUser) {
     return reply.code(409).send({ error: "youtube_not_connected", message: "Connect YouTube first" });
   }
@@ -365,6 +417,11 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
 });
 
 server.post("/api/youtube/comments/:commentId/reply", async (request, reply) => {
+  const sessionUser = await requireSession(request, reply);
+  if (!sessionUser) {
+    return reply;
+  }
+
   const parsed = youtubeReplySchema.safeParse(request.body);
   if (!parsed.success) {
     return reply.code(400).send({ error: "invalid_reply", details: parsed.error.flatten() });
@@ -375,7 +432,7 @@ server.post("/api/youtube/comments/:commentId/reply", async (request, reply) => 
     return reply.code(400).send({ error: "unsafe_reply", reason: replySafety.reason });
   }
 
-  const connectedUser = await getConnectedYouTubeCredentials();
+  const connectedUser = await getConnectedYouTubeCredentials(sessionUser.id);
   if (!connectedUser) {
     return reply.code(409).send({ error: "youtube_not_connected", message: "Connect YouTube first" });
   }
@@ -416,7 +473,12 @@ server.post("/api/youtube/comments/:commentId/reply", async (request, reply) => 
 });
 
 server.post("/api/youtube/comments/:commentId/delete", async (request, reply) => {
-  const connectedUser = await getConnectedYouTubeCredentials();
+  const sessionUser = await requireSession(request, reply);
+  if (!sessionUser) {
+    return reply;
+  }
+
+  const connectedUser = await getConnectedYouTubeCredentials(sessionUser.id);
   if (!connectedUser) {
     return reply.code(409).send({ error: "youtube_not_connected", message: "Connect YouTube first" });
   }
@@ -450,7 +512,11 @@ server.post("/api/youtube/comments/:commentId/delete", async (request, reply) =>
   }
 });
 
-server.post("/api/youtube/comments/:commentId/skip", async (request) => {
+server.post("/api/youtube/comments/:commentId/skip", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   await rememberProcessedComment({
     commentId: request.params.commentId,
     videoId: request.body?.videoId,
@@ -466,15 +532,26 @@ server.post("/api/youtube/comments/:commentId/skip", async (request) => {
 });
 
 server.post("/api/dry-run/comments", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   return server.inject({
     method: "POST",
     url: "/api/comments/analyze-batch",
     payload: request.body,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      cookie: request.headers.cookie || "",
+    },
   }).then((response) => reply.code(response.statusCode).send(JSON.parse(response.payload)));
 });
 
 server.post("/api/pipeline/process-comment", async (request, reply) => {
+  if (!await requireSession(request, reply)) {
+    return reply;
+  }
+
   const parsed = commentSchema.safeParse(request.body);
   if (!parsed.success) {
     return reply.code(400).send({ error: "invalid_comment", details: parsed.error.flatten() });
@@ -1001,6 +1078,93 @@ function getPublicApiUrl(request) {
 
 function getPanelUrl() {
   return process.env.WEB_ORIGIN || "http://127.0.0.1:5173";
+}
+
+async function requireSession(request, reply) {
+  const userId = getSessionUserId(request);
+  if (!userId) {
+    reply.code(401).send({ error: "auth_required", message: "Connect YouTube first" });
+    return null;
+  }
+
+  const user = await getConnectedUser(userId);
+  if (!user) {
+    reply.code(401).send({ error: "auth_required", message: "Reconnect YouTube" });
+    return null;
+  }
+
+  return user;
+}
+
+function setSessionCookie(reply, userId) {
+  const isHttps = getPublicApiUrl().startsWith("https://");
+  const sameSite = isHttps ? "None" : "Lax";
+  const secure = isHttps ? "; Secure" : "";
+
+  reply.header(
+    "Set-Cookie",
+    `${SESSION_COOKIE_NAME}=${signSessionToken(userId)}; HttpOnly; Path=/; Max-Age=${SESSION_MAX_AGE_SECONDS}; SameSite=${sameSite}${secure}`,
+  );
+}
+
+function getSessionUserId(request) {
+  const cookies = parseCookies(request.headers.cookie || "");
+  const token = cookies[SESSION_COOKIE_NAME];
+  if (!token) {
+    return null;
+  }
+
+  return verifySessionToken(token);
+}
+
+function signSessionToken(userId) {
+  const expiresAt = Date.now() + SESSION_MAX_AGE_SECONDS * 1000;
+  const payload = `${userId}.${expiresAt}`;
+  return `${payload}.${signValue(payload)}`;
+}
+
+function verifySessionToken(token) {
+  const [userId, expiresAt, signature] = String(token || "").split(".");
+  if (!userId || !expiresAt || !signature || Number(expiresAt) < Date.now()) {
+    return null;
+  }
+
+  const payload = `${userId}.${expiresAt}`;
+  const expected = signValue(payload);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (signatureBuffer.length !== expectedBuffer.length || !nodeCrypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
+    return null;
+  }
+
+  return userId;
+}
+
+function signValue(value) {
+  const secret = process.env.SESSION_SECRET || process.env.TOKEN_ENCRYPTION_KEY || process.env.GOOGLE_CLIENT_SECRET;
+  if (!secret) {
+    throw new Error("SESSION_SECRET, TOKEN_ENCRYPTION_KEY, or GOOGLE_CLIENT_SECRET is required for API sessions");
+  }
+
+  return nodeCrypto.createHmac("sha256", secret).update(value).digest("base64url");
+}
+
+function parseCookies(cookieHeader) {
+  return String(cookieHeader || "")
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .filter(Boolean)
+    .reduce((cookies, cookie) => {
+      const separatorIndex = cookie.indexOf("=");
+      if (separatorIndex === -1) {
+        return cookies;
+      }
+
+      const name = cookie.slice(0, separatorIndex);
+      const value = cookie.slice(separatorIndex + 1);
+      cookies[name] = decodeURIComponent(value);
+      return cookies;
+    }, {});
 }
 
 function getYouTubeVideoUrl(videoId) {
