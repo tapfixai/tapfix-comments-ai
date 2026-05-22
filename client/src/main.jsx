@@ -300,6 +300,7 @@ function Comments() {
   const [tone, setTone] = useState("Warm");
   const [voiceProfile, setVoiceProfile] = useState("Warm, calm ASMR creator. Short replies, no sales.");
   const [youtubeLimit, setYoutubeLimit] = useState(25);
+  const [nextPageToken, setNextPageToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingYouTube, setIsFetchingYouTube] = useState(false);
   const [isBulkRunning, setIsBulkRunning] = useState(false);
@@ -317,6 +318,7 @@ function Comments() {
       setLatestRun(payload);
       setItems(payload.results || []);
       setActiveQueue(getBestQueueForItems(payload.results || [], activeQueue));
+      setNextPageToken(payload.nextPageToken || "");
       setSelectedIds([]);
       setEditedReplies({});
     } catch (loadError) {
@@ -327,14 +329,15 @@ function Comments() {
     }
   }
 
-  async function fetchNewYouTubeComments() {
+  async function fetchNewYouTubeComments({ useNextPage = false } = {}) {
     setIsFetchingYouTube(true);
     setError("");
     try {
+      const pageToken = useNextPage ? nextPageToken : "";
       const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit }),
+        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit, pageToken }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -344,6 +347,7 @@ function Comments() {
       setLatestRun(payload);
       setItems(payload.results || []);
       setActiveQueue(getBestQueueForItems(payload.results || [], activeQueue));
+      setNextPageToken(payload.nextPageToken || "");
       setSelectedIds([]);
       setEditedReplies({});
       setRowStatuses({});
@@ -531,7 +535,7 @@ function Comments() {
             </label>
             <button
               className="primary-button"
-              onClick={fetchNewYouTubeComments}
+              onClick={() => fetchNewYouTubeComments()}
               disabled={isFetchingYouTube || isLoading}
               type="button"
               title="Fetch fresh comments from YouTube and analyze them"
@@ -539,6 +543,17 @@ function Comments() {
               <RefreshCw size={16} />
               {isFetchingYouTube ? "Loading from YouTube" : "Load new YouTube comments"}
             </button>
+            {nextPageToken && (
+              <button
+                className="filter-button"
+                onClick={() => fetchNewYouTubeComments({ useNextPage: true })}
+                disabled={isFetchingYouTube || isLoading}
+                type="button"
+                title="Load the next YouTube comments page"
+              >
+                Load next {youtubeLimit}
+              </button>
+            )}
             <button
               className="filter-button"
               onClick={loadLatestComments}

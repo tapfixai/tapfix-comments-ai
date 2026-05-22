@@ -75,6 +75,7 @@ const youtubeDryRunSchema = z.object({
   maxResults: z.number().int().min(1).max(100).optional(),
   scanLimit: z.number().int().min(1).max(100).optional(),
   includeThreadsWithReplies: z.boolean().optional(),
+  pageToken: z.string().optional(),
 }).optional();
 
 const youtubeReplySchema = z.object({
@@ -387,23 +388,26 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
       accessToken,
       channelId: connectedUser.youtubeChannelId,
       maxResults: scanLimit,
+      pageToken: parsed.data?.pageToken,
     });
+    const scannedComments = comments.items;
     const candidateComments = includeThreadsWithReplies
-      ? comments
-      : comments.filter((comment) => !comment.hasCreatorReply);
+      ? scannedComments
+      : scannedComments.filter((comment) => !comment.hasCreatorReply);
     const unprocessedComments = (await filterUnprocessedComments(candidateComments)).slice(0, requestedLimit);
 
     const run = await createDryRun(unprocessedComments, {
       source: "youtube",
       channelId: connectedUser.youtubeChannelId,
       channelTitle: connectedUser.youtubeChannelTitle,
-      scannedCount: comments.length,
+      scannedCount: scannedComments.length,
       candidateCount: candidateComments.length,
-      skippedThreadsWithCreatorReplies: comments.length - candidateComments.length,
+      skippedThreadsWithCreatorReplies: scannedComments.length - candidateComments.length,
       scanLimit,
+      nextPageToken: comments.nextPageToken,
     });
 
-    addLog("youtube_dry_run", `Analyzed ${run.total} new YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${comments.length}`);
+    addLog("youtube_dry_run", `Analyzed ${run.total} new YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${scannedComments.length}`);
     return run;
   } catch (error) {
     const statusCode = Number(error.statusCode || 502);
@@ -1265,9 +1269,10 @@ async function getValidYouTubeAccessToken(user) {
   return payload.access_token;
 }
 
-async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }) {
+async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults, pageToken: initialPageToken = "" }) {
   const comments = [];
-  let pageToken = "";
+  let pageToken = initialPageToken;
+  let nextPageToken = "";
 
   while (comments.length < maxResults) {
     const remaining = maxResults - comments.length;
@@ -1313,13 +1318,17 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults }
 
     comments.push(...pageComments);
 
-    pageToken = payload.nextPageToken || "";
+    nextPageToken = payload.nextPageToken || "";
+    pageToken = nextPageToken;
     if (!pageToken || !pageComments.length) {
       break;
     }
   }
 
-  return comments.slice(0, maxResults);
+  return {
+    items: comments.slice(0, maxResults),
+    nextPageToken,
+  };
 }
 
 async function publishYouTubeReply({ accessToken, commentId, text }) {
