@@ -1,4 +1,5 @@
 import pg from "pg";
+import { decryptSecret, encryptSecret } from "./secretCrypto.js";
 
 const { Pool } = pg;
 
@@ -486,8 +487,8 @@ export async function upsertConnectedUser(user) {
         user.googleEmail,
         user.youtubeChannelId,
         user.youtubeChannelTitle,
-        user.accessToken,
-        user.refreshToken,
+        encryptSecret(user.accessToken),
+        encryptSecret(user.refreshToken),
         user.tokenExpiry,
       ],
     );
@@ -557,6 +558,8 @@ export async function getConnectedYouTubeCredentials() {
 
     return {
       ...user,
+      accessToken: decryptSecret(user.accessToken),
+      refreshToken: decryptSecret(user.refreshToken),
       tokenExpiry: user.tokenExpiry?.toISOString?.() || user.tokenExpiry,
     };
   } catch (error) {
@@ -583,7 +586,7 @@ export async function updateConnectedUserTokens(userId, tokens) {
         WHERE id = $1
         RETURNING id
       `,
-      [userId, tokens.accessToken, tokens.refreshToken, tokens.tokenExpiry],
+      [userId, encryptSecret(tokens.accessToken), encryptSecret(tokens.refreshToken), tokens.tokenExpiry],
     );
     return rows[0] || null;
   } catch (error) {
