@@ -47,7 +47,12 @@ async function ensureDatabase() {
       ALTER TABLE dry_run_batches
         ADD COLUMN IF NOT EXISTS source TEXT,
         ADD COLUMN IF NOT EXISTS channel_id TEXT,
-        ADD COLUMN IF NOT EXISTS channel_title TEXT;
+        ADD COLUMN IF NOT EXISTS channel_title TEXT,
+        ADD COLUMN IF NOT EXISTS scanned_count INTEGER,
+        ADD COLUMN IF NOT EXISTS candidate_count INTEGER,
+        ADD COLUMN IF NOT EXISTS skipped_threads_with_creator_replies INTEGER,
+        ADD COLUMN IF NOT EXISTS scan_limit INTEGER,
+        ADD COLUMN IF NOT EXISTS next_page_token TEXT;
 
       CREATE TABLE IF NOT EXISTS dry_run_results (
         id TEXT PRIMARY KEY,
@@ -123,11 +128,41 @@ export async function persistBatchRun(run) {
     await connection.query("BEGIN");
     await connection.query(
       `
-        INSERT INTO dry_run_batches (id, total, replies, reviews, deletes, source, channel_id, channel_title, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO dry_run_batches (
+          id,
+          total,
+          replies,
+          reviews,
+          deletes,
+          source,
+          channel_id,
+          channel_title,
+          scanned_count,
+          candidate_count,
+          skipped_threads_with_creator_replies,
+          scan_limit,
+          next_page_token,
+          created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (id) DO NOTHING
       `,
-      [run.id, run.total, run.replies, run.reviews, run.deletes, run.source, run.channelId, run.channelTitle, run.createdAt],
+      [
+        run.id,
+        run.total,
+        run.replies,
+        run.reviews,
+        run.deletes,
+        run.source,
+        run.channelId,
+        run.channelTitle,
+        run.scannedCount ?? null,
+        run.candidateCount ?? null,
+        run.skippedThreadsWithCreatorReplies ?? null,
+        run.scanLimit ?? null,
+        run.nextPageToken ?? null,
+        run.createdAt,
+      ],
     );
 
     for (const result of run.results) {
@@ -202,6 +237,11 @@ export async function listBatchRunsFromDb(limit = 20) {
           b.source,
           b.channel_id AS "channelId",
           b.channel_title AS "channelTitle",
+          b.scanned_count AS "scannedCount",
+          b.candidate_count AS "candidateCount",
+          b.skipped_threads_with_creator_replies AS "skippedThreadsWithCreatorReplies",
+          b.scan_limit AS "scanLimit",
+          b.next_page_token AS "nextPageToken",
           COUNT(r.id)::int AS "resultsCount"
         FROM dry_run_batches b
         LEFT JOIN dry_run_results r ON r.batch_id = b.id
@@ -242,7 +282,12 @@ export async function latestBatchRunFromDb(source = null) {
           deletes,
           source,
           channel_id AS "channelId",
-          channel_title AS "channelTitle"
+          channel_title AS "channelTitle",
+          scanned_count AS "scannedCount",
+          candidate_count AS "candidateCount",
+          skipped_threads_with_creator_replies AS "skippedThreadsWithCreatorReplies",
+          scan_limit AS "scanLimit",
+          next_page_token AS "nextPageToken"
         FROM dry_run_batches
         ${sourceFilter}
         ORDER BY created_at DESC
@@ -295,6 +340,11 @@ export async function latestBatchRunFromDb(source = null) {
       source: batch.source,
       channelId: batch.channelId,
       channelTitle: batch.channelTitle,
+      scannedCount: batch.scannedCount,
+      candidateCount: batch.candidateCount,
+      skippedThreadsWithCreatorReplies: batch.skippedThreadsWithCreatorReplies,
+      scanLimit: batch.scanLimit,
+      nextPageToken: batch.nextPageToken,
       results: resultsResult.rows.map((result) => ({
         id: result.externalCommentId || result.id,
         videoId: result.videoId,
