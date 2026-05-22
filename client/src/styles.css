@@ -224,6 +224,13 @@ h2 {
   margin: 0;
 }
 
+.queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .queue-tabs {
   display: flex;
   flex-wrap: wrap;

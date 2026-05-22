@@ -273,6 +273,7 @@ function Comments() {
   const [tone, setTone] = useState("Warm");
   const [voiceProfile, setVoiceProfile] = useState("Warm, calm ASMR creator. Short replies, no sales.");
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingYouTube, setIsFetchingYouTube] = useState(false);
   const [isBulkRunning, setIsBulkRunning] = useState(false);
   const [error, setError] = useState("");
 
@@ -288,11 +289,38 @@ function Comments() {
       setLatestRun(payload);
       setItems(payload.results || []);
       setSelectedIds([]);
+      setEditedReplies({});
     } catch (loadError) {
       setError(loadError.message || "Failed to load comments");
       setItems([]);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function fetchNewYouTubeComments() {
+    setIsFetchingYouTube(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ maxResults: 50 }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(formatApiError(payload.message || payload.error || "YouTube refresh failed"));
+      }
+
+      setLatestRun(payload);
+      setItems(payload.results || []);
+      setSelectedIds([]);
+      setEditedReplies({});
+      setRowStatuses({});
+    } catch (refreshError) {
+      setError(formatApiError(refreshError.message || "YouTube refresh failed"));
+    } finally {
+      setIsFetchingYouTube(false);
     }
   }
 
@@ -461,10 +489,27 @@ function Comments() {
             <h2>Comment cockpit</h2>
             <p className="field-note">Review, edit, publish, delete, skip, and see why AI made each call.</p>
           </div>
-          <button className="filter-button" onClick={loadLatestComments} disabled={isLoading} type="button">
-            <RefreshCw size={16} />
-            {isLoading ? "Loading" : "Refresh"}
-          </button>
+          <div className="queue-actions">
+            <button
+              className="primary-button"
+              onClick={fetchNewYouTubeComments}
+              disabled={isFetchingYouTube || isLoading}
+              type="button"
+              title="Fetch fresh comments from YouTube and analyze them"
+            >
+              <RefreshCw size={16} />
+              {isFetchingYouTube ? "Loading from YouTube" : "Load new YouTube comments"}
+            </button>
+            <button
+              className="filter-button"
+              onClick={loadLatestComments}
+              disabled={isLoading || isFetchingYouTube}
+              type="button"
+              title="Reload the latest saved YouTube run without spending YouTube quota"
+            >
+              {isLoading ? "Reloading" : "Reload saved"}
+            </button>
+          </div>
         </div>
         <div className="queue-tabs">
           {queueTabs.map((tab) => (
