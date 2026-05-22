@@ -346,7 +346,13 @@ function Comments() {
         throw new Error(formatApiError(payload.message || payload.error || "YouTube refresh failed"));
       }
 
-      setLatestRun(payload);
+      if (includeProcessed && payload.includeProcessed !== true) {
+        setError("Backend is still updating. Railway has not picked up Review latest again yet; try again after the deploy finishes.");
+      }
+      setLatestRun({
+        ...payload,
+        includeProcessedRequested: includeProcessed,
+      });
       const nextItems = useNextPage ? mergeCommentItems(items, payload.results || []) : payload.results || [];
       setItems(nextItems);
       setActiveQueue(getBestQueueForItems(nextItems, activeQueue));
@@ -625,7 +631,7 @@ function Comments() {
           </p>
           {latestRun.source === "youtube" && (
             <p className="field-note">
-              Scanned {latestRun.scannedCount ?? "?"}, candidates {latestRun.candidateCount ?? "?"}, creator replies skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0}, already handled skipped {latestRun.processedSkippedCount ?? 0}, returned {latestRun.results?.length ?? 0}. {latestRun.includeProcessed ? "Reviewing latest again." : "New only."} {nextPageToken ? "Next page available." : "No next page."}
+              Scanned {latestRun.scannedCount ?? "?"}, candidates {latestRun.candidateCount ?? "?"}, creator replies skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0}, already handled skipped {latestRun.processedSkippedCount ?? 0}, returned {latestRun.results?.length ?? 0}. {latestRun.includeProcessed ? "Reviewing latest again." : latestRun.includeProcessedRequested ? "Waiting for backend deploy." : "New only."} {nextPageToken ? "Next page available." : "No next page."}
             </p>
           )}
         </div>

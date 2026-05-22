@@ -396,12 +396,13 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
     const candidateComments = includeThreadsWithReplies
       ? scannedComments
       : scannedComments.filter((comment) => !comment.hasCreatorReply);
-    const reviewComments = includeProcessed
-      ? candidateComments.slice(0, requestedLimit)
-      : (await filterUnprocessedComments(candidateComments)).slice(0, requestedLimit);
+    const availableComments = includeProcessed
+      ? candidateComments
+      : await filterUnprocessedComments(candidateComments);
+    const reviewComments = availableComments.slice(0, requestedLimit);
     const processedSkippedCount = includeProcessed
       ? 0
-      : Math.max(candidateComments.length - reviewComments.length, 0);
+      : Math.max(candidateComments.length - availableComments.length, 0);
 
     const run = await createDryRun(reviewComments, {
       source: "youtube",
