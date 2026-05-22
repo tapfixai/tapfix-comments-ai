@@ -586,46 +586,50 @@ function Comments() {
       )}
       {error && <p className="error-text">{error}</p>}
       <div className={selectedIds.length > 0 ? "bulk-bar" : "bulk-bar empty"}>
-        <strong>{selectedIds.length} selected</strong>
-        {selectedIds.length === 0 && <span className="bulk-hint">Select comments with the checkboxes to use bulk actions.</span>}
-        <button
-          className="mini-action secondary"
-          onClick={toggleVisibleSelection}
-          disabled={visiblePendingIds.length === 0}
-          type="button"
-        >
-          <CheckSquare size={14} />
-          {selectedIds.length === visiblePendingIds.length && selectedIds.length > 0 ? "Clear visible" : "Select visible"}
-        </button>
-        <button
-          className="mini-action publish"
-          onClick={() => runBulk("reply")}
-          disabled={selectedIds.length === 0 || isBulkRunning}
-          type="button"
-        >
-          Publish selected replies
-        </button>
-        <button
-          className="mini-action delete"
-          onClick={() => runBulk("delete")}
-          disabled={selectedIds.length === 0 || isBulkRunning}
-          type="button"
-        >
-          Delete selected
-        </button>
-        <button
-          className="mini-action"
-          onClick={() => runBulk("skip")}
-          disabled={selectedIds.length === 0 || isBulkRunning}
-          type="button"
-        >
-          Skip selected
-        </button>
-        {selectedIds.length > 0 && (
-          <button className="mini-action secondary" onClick={() => setSelectedIds([])} type="button">
-            Clear
+        <div className="bulk-status">
+          <strong>{selectedIds.length} selected</strong>
+          {selectedIds.length === 0 && <span className="bulk-hint">Select comments with the checkboxes to use bulk actions.</span>}
+          <button
+            className="mini-action secondary"
+            onClick={toggleVisibleSelection}
+            disabled={visiblePendingIds.length === 0}
+            type="button"
+          >
+            <CheckSquare size={14} />
+            {selectedIds.length === visiblePendingIds.length && selectedIds.length > 0 ? "Clear visible" : "Select visible"}
           </button>
-        )}
+        </div>
+        <div className="bulk-actions">
+          <button
+            className="mini-action publish"
+            onClick={() => runBulk("reply")}
+            disabled={selectedIds.length === 0 || isBulkRunning}
+            type="button"
+          >
+            Publish selected replies
+          </button>
+          <button
+            className="mini-action delete"
+            onClick={() => runBulk("delete")}
+            disabled={selectedIds.length === 0 || isBulkRunning}
+            type="button"
+          >
+            Delete selected
+          </button>
+          <button
+            className="mini-action"
+            onClick={() => runBulk("skip")}
+            disabled={selectedIds.length === 0 || isBulkRunning}
+            type="button"
+          >
+            Skip selected
+          </button>
+          {selectedIds.length > 0 && (
+            <button className="mini-action secondary" onClick={() => setSelectedIds([])} type="button">
+              Clear
+            </button>
+          )}
+        </div>
       </div>
       <section className="reply-workspace panel">
         <div className="reply-workspace-head">

@@ -610,6 +610,7 @@ td:nth-child(2) {
   z-index: 4;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
   padding: 10px 12px;
@@ -628,6 +629,23 @@ td:nth-child(2) {
 .bulk-bar strong {
   margin-right: 4px;
   font-size: 13px;
+}
+
+.bulk-status,
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.bulk-status {
+  flex: 1 1 460px;
+}
+
+.bulk-actions {
+  justify-content: flex-end;
+  flex: 0 1 auto;
 }
 
 .bulk-hint {
