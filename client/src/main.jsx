@@ -292,6 +292,7 @@ function Comments() {
   const [rowStatuses, setRowStatuses] = useState({});
   const [tone, setTone] = useState("Warm");
   const [voiceProfile, setVoiceProfile] = useState("Warm, calm ASMR creator. Short replies, no sales.");
+  const [youtubeLimit, setYoutubeLimit] = useState(25);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingYouTube, setIsFetchingYouTube] = useState(false);
   const [isBulkRunning, setIsBulkRunning] = useState(false);
@@ -325,7 +326,7 @@ function Comments() {
       const response = await fetch(`${API_URL}/api/youtube/comments/dry-run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: 25, scanLimit: 25 }),
+        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -510,6 +511,15 @@ function Comments() {
             <p className="field-note">Review, edit, publish, delete, skip, and see why AI made each call.</p>
           </div>
           <div className="queue-actions">
+            <label className="inline-select">
+              <span>Load</span>
+              <select value={youtubeLimit} onChange={(event) => setYoutubeLimit(Number(event.target.value))}>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={75}>75</option>
+                <option value={100}>100</option>
+              </select>
+            </label>
             <button
               className="primary-button"
               onClick={fetchNewYouTubeComments}
