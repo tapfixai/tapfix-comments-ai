@@ -345,12 +345,15 @@ function Comments() {
       }
 
       setLatestRun(payload);
-      setItems(payload.results || []);
-      setActiveQueue(getBestQueueForItems(payload.results || [], activeQueue));
+      const nextItems = useNextPage ? mergeCommentItems(items, payload.results || []) : payload.results || [];
+      setItems(nextItems);
+      setActiveQueue(getBestQueueForItems(nextItems, activeQueue));
       setNextPageToken(payload.nextPageToken || "");
-      setSelectedIds([]);
-      setEditedReplies({});
-      setRowStatuses({});
+      setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
+      if (!useNextPage) {
+        setEditedReplies({});
+        setRowStatuses({});
+      }
     } catch (refreshError) {
       setError(formatApiError(refreshError.message || "YouTube refresh failed"));
     } finally {
@@ -847,6 +850,20 @@ function getBestQueueForItems(items, currentQueue) {
 
   return ["needs_reply", "needs_delete", "unclear", "published", "deleted", "skipped", "all"]
     .find((queueId) => items.some(queuePredicates[queueId])) || currentQueue;
+}
+
+function mergeCommentItems(existingItems, incomingItems) {
+  const merged = [...existingItems];
+  const seenIds = new Set(existingItems.map((item) => item.id));
+
+  for (const item of incomingItems) {
+    if (!seenIds.has(item.id)) {
+      merged.push(item);
+      seenIds.add(item.id);
+    }
+  }
+
+  return merged;
 }
 
 function fallbackDecisionReason(item) {
