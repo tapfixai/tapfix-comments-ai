@@ -335,7 +335,7 @@ function Comments() {
     }
   }
 
-  async function fetchNewYouTubeComments({ useNextPage = false, includeProcessed = false, includeThreadsWithReplies = false, scanLimit = youtubeLimit } = {}) {
+  async function fetchNewYouTubeComments({ useNextPage = false, includeProcessed = false, includeThreadsWithReplies = false, scanLimit = Math.max(100, youtubeLimit) } = {}) {
     setIsFetchingYouTube(true);
     setError("");
     try {
@@ -543,7 +543,7 @@ function Comments() {
           </div>
           <div className="queue-actions">
             <label className="inline-select">
-              <span>Search latest</span>
+              <span>Find up to</span>
               <select value={youtubeLimit} onChange={(event) => setYoutubeLimit(Number(event.target.value))}>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -576,9 +576,9 @@ function Comments() {
                 onClick={() => fetchNewYouTubeComments({ useNextPage: true, includeProcessed: includeProcessedLoad, includeThreadsWithReplies: includeThreadsWithRepliesLoad, scanLimit: scanLimitLoad })}
                 disabled={isFetchingYouTube || isLoading}
                 type="button"
-                title="Search the next page of YouTube comment threads"
+                title="Find more new unanswered comments"
               >
-                Search next {youtubeLimit}
+                Find more
               </button>
             )}
             <button
@@ -637,7 +637,7 @@ function Comments() {
           </p>
           {latestRun.source === "youtube" && (
             <p className="field-note">
-              Searched {latestRun.scannedCount ?? "?"} latest threads, found {latestRun.candidateCount ?? "?"} unanswered, skipped {latestRun.skippedThreadsWithCreatorReplies ?? 0} already answered by creator, skipped {latestRun.processedSkippedCount ?? 0} already seen in TapFix, showing {latestRun.results?.length ?? 0}. {latestRun.includeProcessed ? "Reviewing saved unanswered." : latestRun.includeProcessedRequested ? "Waiting for backend deploy." : "New unanswered only."} {nextPageToken ? "Next page available." : "No next page."}
+              {latestRun.includeProcessed ? "Showing saved unanswered comments." : `Showing ${latestRun.results?.length ?? 0} new unanswered comments.`} {nextPageToken ? "More comments are available." : "No more pages found."}
             </p>
           )}
         </div>
