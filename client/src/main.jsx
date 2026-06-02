@@ -517,6 +517,11 @@ function Comments() {
   });
   const queueCounts = Object.fromEntries(queueTabs.map((tab) => [tab.id, items.filter(tab.predicate).length]));
   const visiblePendingIds = filteredItems.filter((item) => isPending(item)).map((item) => item.id);
+  const visibleReplyIds = filteredItems.filter((item) => canRunAction(item, "reply")).map((item) => item.id);
+  const visibleDeleteIds = filteredItems.filter((item) => canRunAction(item, "delete")).map((item) => item.id);
+  const selectedReplyCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "reply")).length;
+  const selectedDeleteCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "delete")).length;
+  const selectedSkippableCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "skip")).length;
 
   useEffect(() => {
     setSelectedIds((current) => current.filter((id) => visiblePendingIds.includes(id)));
@@ -528,9 +533,9 @@ function Comments() {
     ));
   }
 
-  function toggleVisibleSelection() {
-    const allVisibleSelected = visiblePendingIds.length > 0 && visiblePendingIds.every((id) => selectedIds.includes(id));
-    setSelectedIds(allVisibleSelected ? [] : visiblePendingIds);
+  function toggleSelectionGroup(ids) {
+    const allGroupSelected = ids.length > 0 && ids.every((id) => selectedIds.includes(id));
+    setSelectedIds(allGroupSelected ? [] : ids);
   }
 
   return (
@@ -651,36 +656,54 @@ function Comments() {
         <div className="bulk-controls">
           <button
             className="mini-action secondary"
-            onClick={toggleVisibleSelection}
+            onClick={() => toggleSelectionGroup(visibleReplyIds)}
+            disabled={visibleReplyIds.length === 0}
+            type="button"
+          >
+            <CheckSquare size={14} />
+            {visibleReplyIds.length > 0 && visibleReplyIds.every((id) => selectedIds.includes(id)) ? "Clear replies" : `Select replies (${visibleReplyIds.length})`}
+          </button>
+          <button
+            className="mini-action secondary"
+            onClick={() => toggleSelectionGroup(visibleDeleteIds)}
+            disabled={visibleDeleteIds.length === 0}
+            type="button"
+          >
+            <CheckSquare size={14} />
+            {visibleDeleteIds.length > 0 && visibleDeleteIds.every((id) => selectedIds.includes(id)) ? "Clear deletes" : `Select deletes (${visibleDeleteIds.length})`}
+          </button>
+          <button
+            className="mini-action secondary"
+            onClick={() => toggleSelectionGroup(visiblePendingIds)}
             disabled={visiblePendingIds.length === 0}
             type="button"
           >
             <CheckSquare size={14} />
-            {selectedIds.length === visiblePendingIds.length && selectedIds.length > 0 ? "Clear visible" : "Select visible"}
+            {visiblePendingIds.length > 0 && visiblePendingIds.every((id) => selectedIds.includes(id)) ? "Clear all visible" : `Select all visible (${visiblePendingIds.length})`}
           </button>
           <button
             className="mini-action publish"
             onClick={() => runBulk("reply")}
-            disabled={selectedIds.length === 0 || isBulkRunning}
+            disabled={selectedReplyCount === 0 || isBulkRunning}
             type="button"
           >
-            Publish selected replies
+            Publish replies ({selectedReplyCount})
           </button>
           <button
             className="mini-action delete"
             onClick={() => runBulk("delete")}
-            disabled={selectedIds.length === 0 || isBulkRunning}
+            disabled={selectedDeleteCount === 0 || isBulkRunning}
             type="button"
           >
-            Delete selected
+            Delete ({selectedDeleteCount})
           </button>
           <button
             className="mini-action"
             onClick={() => runBulk("skip")}
-            disabled={selectedIds.length === 0 || isBulkRunning}
+            disabled={selectedSkippableCount === 0 || isBulkRunning}
             type="button"
           >
-            Skip selected
+            Skip ({selectedSkippableCount})
           </button>
           {selectedIds.length > 0 && (
             <button className="mini-action secondary" onClick={() => setSelectedIds([])} type="button">
