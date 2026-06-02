@@ -1,7 +1,8 @@
 const meaningless = new Set([".", "ok", "lol", "😂", "first"]);
 const linkPattern = /(https?:\/\/|\bwww\.|bit\.ly|t\.me|discord\.gg)/i;
 const spamPattern = /\b(dm me|check my profile|click my profile|visit my page|free money|giveaway|promo|promote|cheap prices|followers|collab|sub4sub|telegram only)\b/i;
-const sexualPattern = /\b(sex|sexy|nude|nudes|onlyfans|xxx|horny|boobs?|booty|bootie|ass|thick|pimp|p\.i\.m\.p|fetish|kiss me|be with you|tetas?|sisas?|sisama|payaso|leite nas suas)\b/i;
+const sexualPattern = /\b(sex|nude|nudes|onlyfans|xxx|horny|boobs?|booty|bootie|ass|pimp|p\.i\.m\.p|fetish|kiss me|be with you|tetas?|sisas?|sisama|payaso|leite nas suas)\b/i;
+const softAppearancePattern = /\b(sexy|gorgeous|pretty|cute|sweet|belle|beau|bonita|linda|guapa|hermosa|красив[а-я]+|мила[яа]|красот[а-я]+)\b/i;
 const sexualContextPattern = /\b(lit|bed)\b.{0,48}\b(défaire|defaire|undress|unmake)\b|\b(défaire|defaire|undress|unmake)\b.{0,48}\b(lit|bed)\b|\b(show|send|more|want|need)\b.{0,24}\b(feet|foot)\b|\b(feet|foot)\b.{0,24}\b(pics?|video|please|pls)\b/i;
 const greekSexualPattern = /(μουν[αά]ρ[αά]|βυζι[αά]|κωλ[οό]ς|σεξ)/i;
 const hatePattern = /\b(kill yourself|idiot|stupid|hate you|trash|moron)\b/i;
@@ -10,7 +11,7 @@ const reviewPattern = /\b(copied|buying views|botted|bot|bots|deleting negative|
 const emojiOnlyPattern = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u;
 const positiveEmojiPattern = /^[❤♥💕💖💗💓💞💝💘🫶👍👌👏🙌🙏🔥💯✨🎉😍🥰😊☺🤍🩷💐🌹🌷🌺🌸🌼😘💋〰\s]+$/u;
 const positiveEmojiSignalPattern = /[❤♥💕💖💗💓💞💝💘🫶👍👌👏🙌🙏🔥💯✨🎉😍🥰😊☺🤍🩷💐🌹🌷🌺🌸🌼😘💋]/gu;
-const positiveShortPattern = /\b(lovely|beautiful|great|nice|very nice|amazing|wonderful|perfect|cool|i like|really like|love it|love this|nice video|woww+|muito bom|maravilhos[ao]s?|adorando|adorei|amei|gostei|bela+|que rico|kerrico|merci|j[’']adore|j[’']aime|mükemmel|замечательно|спасибо|класс|супер|нравится|обожаю)\b|μαγειρ[εέ]μα|τρελαν[εέ]ς/i;
+const positiveShortPattern = /\b(lovely|beautiful|great|nice|very nice|amazing|wonderful|perfect|cool|i like|really like|love it|love this|nice video|wowx*|woww+|muito bom|maravilhos[ao]s?|adorando|adorei|amei|gostei|bela+|que rico|kerrico|merci|j[’']adore|j[’']aime|mükemmel|замечательно|спасибо|класс|супер|нравится|обожаю)\b|μαγειρ[εέ]μα|τρελαν[εέ]ς/i;
 
 export function analyzeComment(comment) {
   const normalized = comment.trim().toLowerCase();
@@ -26,6 +27,10 @@ export function analyzeComment(comment) {
     return safeResult(comment, fallbackLanguage(language), "positive_reaction");
   }
 
+  if (softAppearancePattern.test(comment) && !sexualContextPattern.test(comment)) {
+    return safeResult(comment, fallbackLanguage(language), "appearance_compliment");
+  }
+
   if (meaningless.has(normalized) || normalized.length <= 2 || emojiOnlyPattern.test(normalized)) {
     return deletion("meaningless", language);
   }
@@ -37,9 +42,11 @@ export function analyzeComment(comment) {
   if (positiveShortPattern.test(normalized)) {
     return safeResult(comment, fallbackLanguage(language), "positive_reaction");
   }
-  if (language.code === "unknown" || language.confidence < 0.45) return deletion("unclear_language", language);
+  if (language.code === "unknown" || language.confidence < 0.45) {
+    return review("unclear_language", language);
+  }
   if (!isPositiveAsmrComment(normalized) && !positiveShortPattern.test(normalized) && normalized.split(/\s+/).length <= 2 && normalized.length < 18) {
-    return deletion("unclear", language);
+    return review("unclear", language);
   }
 
   return safeResult(comment, language);
@@ -144,7 +151,7 @@ function detectLanguage(comment) {
   if (/[äöüß]/i.test(comment) || /\b(danke|entspannend|schlaf|perfekt|gerausch)\b/i.test(text)) {
     return { code: "de", name: "German", confidence: 0.9 };
   }
-  if (/\b(thank|thanks|sleep|relax|relaxing|calming|sound|sounds|mic|nice|beautiful|perfect|helped|watching|tingles|love this|amazing|w video|bro cooked|lowkey fire|slapped tho)\b/i.test(text)) {
+  if (/\b(thank|thanks|sleep|relax|relaxing|calming|sound|sounds|mic|nice|beautiful|perfect|helped|watching|tingles|love this|amazing|w video|bro cooked|lowkey fire|slapped tho|wowx*|woww+)\b/i.test(text)) {
     return { code: "en", name: "English", confidence: 0.92 };
   }
   if (latinWords.length >= 2) {

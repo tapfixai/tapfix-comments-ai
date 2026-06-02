@@ -738,13 +738,10 @@ async function analyzeCommentWithAi(comment) {
     const cleanedReply = cleanAiReply(aiReply);
 
     if (cleanedReply === "DELETE") {
+      addLog("ai_delete_downgraded", `${comment.id}: OpenAI returned DELETE for a rules-safe reply candidate`);
       return {
         ...analysis,
-        action: "delete",
-        category: "ai_delete",
-        replyLanguage: null,
-        reply: "DELETE",
-        replySource: "openai",
+        replySource: "rules_fallback",
       };
     }
 
@@ -804,7 +801,8 @@ async function generateOpenAIReply(comment, analysis, options = {}) {
         options.regenerate ? "Generate a fresh alternative. Avoid generic repeated thank-you wording." : "",
         `Keep it under ${settings.maxReplyLength} characters.`,
         `Use 0-${settings.maxEmoji} emoji maximum.`,
-        "If the comment is negative, sexual, spammy, aggressive, political, duplicated, contains links, unclear, or unsafe, return exactly DELETE.",
+        "If the comment is explicit sexual harassment, spammy, aggressive, political, duplicated, contains links, or clearly unsafe, return exactly DELETE.",
+        "Do not return DELETE for simple praise, emoji reactions, mild appearance compliments, short positive comments, or unclear but non-harmful comments.",
         "Return only the reply text or DELETE. No quotes, no explanation.",
       ].filter(Boolean).join("\n"),
       input: [
