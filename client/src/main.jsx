@@ -541,6 +541,13 @@ function Comments() {
   const selectedReviewCount = filteredItems.filter((item) => selectedIds.includes(item.id) && isPending(item) && item.action === "review").length;
   const selectedDeleteCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canDeleteComment(item)).length;
   const selectedSkippableCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "skip")).length;
+  const pendingCount = items.filter(isPending).length;
+  const publishedCount = items.filter((item) => getItemStatus(item) === "published").length;
+  const deletedCount = items.filter((item) => getItemStatus(item) === "deleted").length;
+  const skippedCount = items.filter((item) => getItemStatus(item) === "skipped").length;
+  const replyQueueCount = items.filter((item) => isPending(item) && item.action === "reply").length;
+  const reviewQueueCount = items.filter((item) => isPending(item) && item.action === "review").length;
+  const deleteQueueCount = items.filter((item) => isPending(item) && item.action === "delete").length;
 
   useEffect(() => {
     setSelectedIds((current) => current.filter((id) => visiblePendingIds.includes(id)));
@@ -669,6 +676,23 @@ function Comments() {
             <p className="field-note">
               {latestRun.includeProcessed ? "Showing saved unanswered comments." : `Showing ${latestRun.results?.length ?? 0} new unanswered comments.`} {nextPageToken ? "More comments are available." : "No more pages found."}
             </p>
+          )}
+          {latestRun.source === "youtube" && (
+            <div className="queue-summary" aria-label="Queue summary">
+              <StatusChip label="Loaded" value={items.length} />
+              <StatusChip label="Still pending" value={pendingCount} />
+              <StatusChip label="Replies" value={replyQueueCount} tone="green" />
+              <StatusChip label="Reviews" value={reviewQueueCount} tone="amber" />
+              <StatusChip label="Deletes" value={deleteQueueCount} tone="red" />
+              <StatusChip label="Published" value={publishedCount} />
+              <StatusChip label="Deleted" value={deletedCount} />
+              <StatusChip label="Skipped" value={skippedCount} />
+              {Number.isFinite(latestRun.scannedCount) && <StatusChip label="Searched" value={latestRun.scannedCount} />}
+              {Number.isFinite(latestRun.candidateCount) && <StatusChip label="Unanswered found" value={latestRun.candidateCount} />}
+              {Number.isFinite(latestRun.skippedThreadsWithCreatorReplies) && <StatusChip label="Already answered" value={latestRun.skippedThreadsWithCreatorReplies} />}
+              {Number.isFinite(latestRun.processedSkippedCount) && <StatusChip label="Seen in TapFix" value={latestRun.processedSkippedCount} />}
+              <StatusChip label="More pages" value={nextPageToken ? "Yes" : "No"} tone={nextPageToken ? "amber" : "green"} />
+            </div>
           )}
         </div>
       )}
@@ -1562,6 +1586,15 @@ function StatusRow({ label, value }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function StatusChip({ label, value, tone = "" }) {
+  return (
+    <span className={tone ? `status-chip ${tone}` : "status-chip"}>
+      {label}
+      <strong>{value}</strong>
+    </span>
   );
 }
 

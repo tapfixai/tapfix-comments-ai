@@ -996,6 +996,48 @@ textarea {
   margin: 0;
 }
 
+.queue-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 31px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.status-chip strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.status-chip.green {
+  border-color: rgba(118, 185, 129, 0.55);
+  color: var(--success);
+}
+
+.status-chip.amber {
+  border-color: rgba(224, 175, 104, 0.55);
+  color: var(--warning);
+}
+
+.status-chip.red {
+  border-color: rgba(255, 111, 105, 0.55);
+  color: var(--danger);
+}
+
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
