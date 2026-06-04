@@ -3,6 +3,8 @@ const linkPattern = /(https?:\/\/|\bwww\.|bit\.ly|t\.me|discord\.gg)/i;
 const spamPattern = /\b(dm me|check my profile|click my profile|visit my page|free money|giveaway|promo|promote|cheap prices|followers|collab|sub4sub|telegram only)\b/i;
 const channelMentionPattern = /(^|\s)@[a-z0-9_.-]{3,}/i;
 const sexualPattern = /\b(sex|nude|nudes|onlyfans|xxx|horny|boobs?|booty|bootie|ass|pimp|p\.i\.m\.p|fetish|kiss me|be with you|tetas?|sisas?|sisama|payaso|leite nas suas)\b/i;
+const explicitSexualPattern = /\b(anal|anus|butt\s*plug|dildo|vibrator|porn|porno|pornhub|naked|undress|blowjob|handjob|suck\s+(?:my\s+)?(?:dick|cock)|dick|cock|penis|vagina|pussy|clit|cum|orgasm|masturbat(?:e|ing|ion)|nudes?|boobs?|tits?|horny|fetish|feet\s*(?:pics?|video)|sexo|sexual|desnud[ao]s?|culo|coño|polla|pene|vagina|buceta|bunda|pau|pica|xana|nua|nu[ao]|sexe|nu(?:e|s)?|bite|chatte|cul|seks|porno|ciplak|sik|amcik)\b/i;
+const turkishSexualPattern = /(çıplak|göt|amcık)/i;
 const cyrillicSexualPattern = /(анальн[а-я]*|анус|задниц[а-я]*|жоп[а-я]*|секс|порно|интим|гол[а-я]*|сиськ[а-я]*|груд[ьяи]|возбуд[а-я]*|трах[а-я]*|член|хуй|пизд[а-я]*|еб[а-я]*)/i;
 const softAppearancePattern = /\b(sexy|gorgeous|pretty|cute|sweet|belle|beau|bonita|linda|guapa|hermosa|красив[а-я]+|мила[яа]|красот[а-я]+)\b/i;
 const sexualContextPattern = /\b(lit|bed)\b.{0,48}\b(défaire|defaire|undress|unmake)\b|\b(défaire|defaire|undress|unmake)\b.{0,48}\b(lit|bed)\b|\b(show|send|more|want|need)\b.{0,24}\b(feet|foot)\b|\b(feet|foot)\b.{0,24}\b(pics?|video|please|pls)\b/i;
@@ -23,7 +25,7 @@ export function analyzeComment(comment) {
   if (linkPattern.test(comment)) return deletion("link", language);
   if (channelMentionPattern.test(comment)) return deletion("channel_promo", language);
   if (spamPattern.test(comment)) return deletion("spam", language);
-  if (sexualPattern.test(comment) || cyrillicSexualPattern.test(comment) || sexualContextPattern.test(comment) || greekSexualPattern.test(comment)) return deletion("sexual", language);
+  if (sexualPattern.test(comment) || explicitSexualPattern.test(comment) || cyrillicSexualPattern.test(comment) || turkishSexualPattern.test(comment) || sexualContextPattern.test(comment) || greekSexualPattern.test(comment)) return deletion("sexual", language);
   if (hatePattern.test(comment)) return deletion("hate", language);
   if (politicalPattern.test(comment)) return deletion("political", language);
 
@@ -76,7 +78,7 @@ export function validateReply(reply, maxLength = 120) {
   if (reply.length > maxLength) return { safe: false, reason: "too_long" };
   if (linkPattern.test(reply)) return { safe: false, reason: "contains_link" };
   if (spamPattern.test(reply)) return { safe: false, reason: "promotional" };
-  if (sexualPattern.test(reply) || cyrillicSexualPattern.test(reply)) return { safe: false, reason: "nsfw" };
+  if (sexualPattern.test(reply) || explicitSexualPattern.test(reply) || cyrillicSexualPattern.test(reply) || turkishSexualPattern.test(reply)) return { safe: false, reason: "nsfw" };
   return { safe: true };
 }
 
