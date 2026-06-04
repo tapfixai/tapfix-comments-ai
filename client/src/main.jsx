@@ -471,7 +471,10 @@ function Comments() {
   }
 
   async function runBulk(action) {
-    const targets = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, action));
+    const targets = filteredItems.filter((item) => (
+      selectedIds.includes(item.id)
+      && (action === "delete" ? canDeleteComment(item) : canRunAction(item, action))
+    ));
     if (!targets.length) {
       setError("No selected comments match this action");
       return;
@@ -536,7 +539,7 @@ function Comments() {
   const visibleDeleteIds = filteredItems.filter((item) => canRunAction(item, "delete")).map((item) => item.id);
   const selectedReplyCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "reply")).length;
   const selectedReviewCount = filteredItems.filter((item) => selectedIds.includes(item.id) && isPending(item) && item.action === "review").length;
-  const selectedDeleteCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "delete")).length;
+  const selectedDeleteCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canDeleteComment(item)).length;
   const selectedSkippableCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "skip")).length;
 
   useEffect(() => {
@@ -683,7 +686,7 @@ function Comments() {
             type="button"
           >
             <CheckSquare size={14} />
-            {visibleReplyIds.length > 0 && visibleReplyIds.every((id) => selectedIds.includes(id)) ? "Clear replies" : `Select replies (${visibleReplyIds.length})`}
+            {visibleReplyIds.length > 0 && visibleReplyIds.every((id) => selectedIds.includes(id)) ? "Clear visible replies" : `Select visible replies (${visibleReplyIds.length})`}
           </button>
           <button
             className="mini-action secondary"
@@ -692,7 +695,7 @@ function Comments() {
             type="button"
           >
             <CheckSquare size={14} />
-            {visibleDeleteIds.length > 0 && visibleDeleteIds.every((id) => selectedIds.includes(id)) ? "Clear deletes" : `Select deletes (${visibleDeleteIds.length})`}
+            {visibleDeleteIds.length > 0 && visibleDeleteIds.every((id) => selectedIds.includes(id)) ? "Clear visible deletes" : `Select visible deletes (${visibleDeleteIds.length})`}
           </button>
           <button
             className="mini-action secondary"
@@ -701,7 +704,7 @@ function Comments() {
             type="button"
           >
             <CheckSquare size={14} />
-            {visibleReviewIds.length > 0 && visibleReviewIds.every((id) => selectedIds.includes(id)) ? "Clear reviews" : `Select reviews (${visibleReviewIds.length})`}
+            {visibleReviewIds.length > 0 && visibleReviewIds.every((id) => selectedIds.includes(id)) ? "Clear visible reviews" : `Select visible reviews (${visibleReviewIds.length})`}
           </button>
           <button
             className="mini-action secondary"
