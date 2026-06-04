@@ -867,6 +867,16 @@ function Comments() {
                         Delete
                       </button>
                     )}
+                    {item.action !== "delete" && canDeleteComment(item) && (
+                      <button
+                        className="mini-action delete"
+                        onClick={() => runManualAction(item, "delete")}
+                        disabled={isWorking}
+                        type="button"
+                      >
+                        Delete comment
+                      </button>
+                    )}
                     {item.action === "review" && (
                       <button
                         className="mini-action secondary"
@@ -935,6 +945,11 @@ function canRunAction(item, action) {
     return item.action === "delete";
   }
   return true;
+}
+
+function canDeleteComment(item) {
+  const status = getItemStatus(item);
+  return hasYouTubeTarget(item) && status !== "deleted" && status !== "working";
 }
 
 function getBestQueueForItems(items, currentQueue) {
