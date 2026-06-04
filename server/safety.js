@@ -11,8 +11,8 @@ const reviewPattern = /\b(copied|buying views|botted|bot|bots|deleting negative|
 const emojiOnlyPattern = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u;
 const positiveEmojiPattern = /^[❤♥💕💖💗💓💞💝💘🫶👍👌👏🙌🙏🔥💯✨🎉😍🥰😊☺🤍🩷💐🌹🌷🌺🌸🌼😘💋〰\s]+$/u;
 const positiveEmojiSignalPattern = /[❤♥💕💖💗💓💞💝💘🫶👍👌👏🙌🙏🔥💯✨🎉😍🥰😊☺🤍🩷💐🌹🌷🌺🌸🌼😘💋]/gu;
-const positiveShortPattern = /\b(lovely|beautiful|great|nice|very nice|amazing|wonderful|perfect|cool|i like|really like|love it|love this|nice video|wowx*|woww+|muito bom|maravilhos[ao]s?|adorando|adorei|amei|gostei|bela+|que rico|kerrico|merci|j[’']adore|j[’']aime|mükemmel|замечательно|спасибо|класс|супер|нравится|обожаю|потрясающ[а-я]*|завораживающ[а-я]*|красив[а-я]*|прекрасн[а-я]*|мил[а-я]*|крисс?)\b|μαγειρ[εέ]μα|τρελαν[εέ]ς/i;
-const cyrillicPositivePattern = /(потрясающ[а-я]*|завораживающ[а-я]*|красив[а-я]*|прекрасн[а-я]*|мил[а-я]*|спасибо|класс|супер|нравится|обожаю|крисс?)/i;
+const positiveShortPattern = /\b(lovely|beautiful|great|nice|very nice|amazing|wonderful|perfect|cool|i like|really like|love it|love this|nice video|wowx*|woww+|muito bom|maravilhos[ao]s?|adorando|adorei|amei|gostei|bela+|que rico|kerrico|merci|j[’']adore|j[’']aime|mükemmel|замечательн[а-я]*|спасибо|класс|супер|нравится|обожаю|ух ты|потрясающ[а-я]*|завораживающ[а-я]*|красив[а-я]*|прекрасн[а-я]*|мил[а-я]*|крисс?)\b|μαγειρ[εέ]μα|τρελαν[εέ]ς/i;
+const cyrillicPositivePattern = /(потрясающ[а-я]*|завораживающ[а-я]*|красив[а-я]*|прекрасн[а-я]*|замечательн[а-я]*|мил[а-я]*|спасибо|класс|супер|нравится|обожаю|ух ты|крисс?)/i;
 
 export function analyzeComment(comment) {
   const normalized = comment.trim().toLowerCase();
