@@ -11,7 +11,8 @@ const reviewPattern = /\b(copied|buying views|botted|bot|bots|deleting negative|
 const emojiOnlyPattern = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u;
 const positiveEmojiPattern = /^[❤♥💕💖💗💓💞💝💘🫶👍👌👏🙌🙏🔥💯✨🎉😍🥰😊☺🤍🩷💐🌹🌷🌺🌸🌼😘💋〰\s]+$/u;
 const positiveEmojiSignalPattern = /[❤♥💕💖💗💓💞💝💘🫶👍👌👏🙌🙏🔥💯✨🎉😍🥰😊☺🤍🩷💐🌹🌷🌺🌸🌼😘💋]/gu;
-const positiveShortPattern = /\b(lovely|beautiful|great|nice|very nice|amazing|wonderful|perfect|cool|i like|really like|love it|love this|nice video|wowx*|woww+|muito bom|maravilhos[ao]s?|adorando|adorei|amei|gostei|bela+|que rico|kerrico|merci|j[’']adore|j[’']aime|mükemmel|замечательно|спасибо|класс|супер|нравится|обожаю)\b|μαγειρ[εέ]μα|τρελαν[εέ]ς/i;
+const positiveShortPattern = /\b(lovely|beautiful|great|nice|very nice|amazing|wonderful|perfect|cool|i like|really like|love it|love this|nice video|wowx*|woww+|muito bom|maravilhos[ao]s?|adorando|adorei|amei|gostei|bela+|que rico|kerrico|merci|j[’']adore|j[’']aime|mükemmel|замечательно|спасибо|класс|супер|нравится|обожаю|потрясающ[а-я]*|завораживающ[а-я]*|красив[а-я]*|прекрасн[а-я]*|мил[а-я]*|крисс?)\b|μαγειρ[εέ]μα|τρελαν[εέ]ς/i;
+const cyrillicPositivePattern = /(потрясающ[а-я]*|завораживающ[а-я]*|красив[а-я]*|прекрасн[а-я]*|мил[а-я]*|спасибо|класс|супер|нравится|обожаю|крисс?)/i;
 
 export function analyzeComment(comment) {
   const normalized = comment.trim().toLowerCase();
@@ -39,9 +40,13 @@ export function analyzeComment(comment) {
   if (!hasPositiveComparisonContext(comment) && !/\b(less fake|not fake)\b/i.test(comment) && reviewPattern.test(comment)) {
     return review("sensitive_or_negative", language);
   }
-  if (positiveShortPattern.test(normalized)) {
+  if (positiveShortPattern.test(normalized) || cyrillicPositivePattern.test(normalized)) {
     return safeResult(comment, fallbackLanguage(language), "positive_reaction");
   }
+  if (isShortPositiveUnknown(comment, normalized)) {
+    return safeResult(comment, fallbackLanguage(language), "positive_reaction");
+  }
+
   if (language.code === "unknown" || language.confidence < 0.45) {
     return review("unclear_language", language);
   }
@@ -113,6 +118,15 @@ function isPositiveReaction(comment) {
 
   const positiveEmojiCount = (normalized.match(positiveEmojiSignalPattern) || []).length;
   return positiveEmojiCount >= 2 || (positiveEmojiCount >= 1 && positiveShortPattern.test(normalized));
+}
+
+function isShortPositiveUnknown(comment, normalized) {
+  const textLength = [...comment.trim()].length;
+  return textLength <= 28 && (
+    positiveShortPattern.test(normalized)
+    || cyrillicPositivePattern.test(normalized)
+    || positiveEmojiSignalPattern.test(stripEmojiModifiers(comment))
+  );
 }
 
 function hasPositiveComparisonContext(text) {

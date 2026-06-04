@@ -484,6 +484,20 @@ function Comments() {
     setIsBulkRunning(false);
   }
 
+  async function generateSelectedReviewReplies() {
+    const targets = filteredItems.filter((item) => selectedIds.includes(item.id) && isPending(item) && item.action === "review");
+    if (!targets.length) {
+      setError("No selected review comments to generate replies for");
+      return;
+    }
+
+    setIsBulkRunning(true);
+    for (const item of targets) {
+      await regenerateReply(item);
+    }
+    setIsBulkRunning(false);
+  }
+
   useEffect(() => {
     void loadLatestComments();
   }, []);
@@ -518,8 +532,10 @@ function Comments() {
   const queueCounts = Object.fromEntries(queueTabs.map((tab) => [tab.id, items.filter(tab.predicate).length]));
   const visiblePendingIds = filteredItems.filter((item) => isPending(item)).map((item) => item.id);
   const visibleReplyIds = filteredItems.filter((item) => canRunAction(item, "reply")).map((item) => item.id);
+  const visibleReviewIds = filteredItems.filter((item) => isPending(item) && item.action === "review").map((item) => item.id);
   const visibleDeleteIds = filteredItems.filter((item) => canRunAction(item, "delete")).map((item) => item.id);
   const selectedReplyCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "reply")).length;
+  const selectedReviewCount = filteredItems.filter((item) => selectedIds.includes(item.id) && isPending(item) && item.action === "review").length;
   const selectedDeleteCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "delete")).length;
   const selectedSkippableCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "skip")).length;
 
@@ -534,8 +550,14 @@ function Comments() {
   }
 
   function toggleSelectionGroup(ids) {
-    const allGroupSelected = ids.length > 0 && ids.every((id) => selectedIds.includes(id));
-    setSelectedIds(allGroupSelected ? [] : ids);
+    setSelectedIds((current) => {
+      const allGroupSelected = ids.length > 0 && ids.every((id) => current.includes(id));
+      if (allGroupSelected) {
+        return current.filter((id) => !ids.includes(id));
+      }
+
+      return Array.from(new Set([...current, ...ids]));
+    });
   }
 
   return (
@@ -674,12 +696,29 @@ function Comments() {
           </button>
           <button
             className="mini-action secondary"
+            onClick={() => toggleSelectionGroup(visibleReviewIds)}
+            disabled={visibleReviewIds.length === 0}
+            type="button"
+          >
+            <CheckSquare size={14} />
+            {visibleReviewIds.length > 0 && visibleReviewIds.every((id) => selectedIds.includes(id)) ? "Clear reviews" : `Select reviews (${visibleReviewIds.length})`}
+          </button>
+          <button
+            className="mini-action secondary"
             onClick={() => toggleSelectionGroup(visiblePendingIds)}
             disabled={visiblePendingIds.length === 0}
             type="button"
           >
             <CheckSquare size={14} />
             {visiblePendingIds.length > 0 && visiblePendingIds.every((id) => selectedIds.includes(id)) ? "Clear all visible" : `Select all visible (${visiblePendingIds.length})`}
+          </button>
+          <button
+            className="mini-action publish"
+            onClick={generateSelectedReviewReplies}
+            disabled={selectedReviewCount === 0 || isBulkRunning}
+            type="button"
+          >
+            Generate replies ({selectedReviewCount})
           </button>
           <button
             className="mini-action publish"
@@ -826,6 +865,17 @@ function Comments() {
                         type="button"
                       >
                         Delete
+                      </button>
+                    )}
+                    {item.action === "review" && (
+                      <button
+                        className="mini-action secondary"
+                        onClick={() => regenerateReply(item)}
+                        disabled={!isPending(item) || isWorking}
+                        type="button"
+                      >
+                        <Sparkles size={13} />
+                        Generate reply
                       </button>
                     )}
                     <button
