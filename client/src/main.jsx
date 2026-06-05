@@ -308,10 +308,12 @@ function Comments() {
   const [isFetchingYouTube, setIsFetchingYouTube] = useState(false);
   const [isBulkRunning, setIsBulkRunning] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   async function loadLatestComments() {
     setIsLoading(true);
     setError("");
+    setNotice("");
     try {
       const response = await apiFetch(`${API_URL}/api/comments/batch-runs/latest?source=youtube`);
       const payload = await response.json();
@@ -338,6 +340,7 @@ function Comments() {
   async function fetchNewYouTubeComments({ useNextPage = false, includeProcessed = false, includeThreadsWithReplies = false, scanLimit = Math.max(100, youtubeLimit) } = {}) {
     setIsFetchingYouTube(true);
     setError("");
+    setNotice("");
     try {
       const pageToken = useNextPage ? nextPageToken : "";
       const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
@@ -365,6 +368,11 @@ function Comments() {
       setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
       setScanLimitLoad(payload.scanLimit || scanLimit);
       setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
+      if (!includeProcessed && !useNextPage && (payload.results || []).length === 0) {
+        setNotice(nextPageToken || payload.nextPageToken
+          ? "No new unseen comments found in this pass. TapFix may have already seen the latest unanswered comments; try Find more or Review saved unanswered."
+          : "No new unseen unanswered comments found. Review saved unanswered shows comments TapFix has already loaded but you have not processed yet.");
+      }
       if (!useNextPage) {
         setEditedReplies({});
         setRowStatuses({});
@@ -697,6 +705,7 @@ function Comments() {
         </div>
       )}
       {error && <p className="error-text">{error}</p>}
+      {notice && <p className="notice-text">{notice}</p>}
       <div className={selectedIds.length > 0 ? "bulk-bar" : "bulk-bar empty"}>
         <div className="bulk-status">
           <strong>{selectedIds.length} selected</strong>

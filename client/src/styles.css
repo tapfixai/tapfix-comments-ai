@@ -957,6 +957,13 @@ textarea {
   font-weight: 700;
 }
 
+.notice-text {
+  margin: 0;
+  color: var(--warning);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .field {
   display: grid;
   gap: 7px;
