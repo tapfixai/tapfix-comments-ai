@@ -698,7 +698,7 @@ function Comments() {
               {Number.isFinite(latestRun.scannedCount) && <StatusChip label="Searched" value={latestRun.scannedCount} />}
               {Number.isFinite(latestRun.candidateCount) && <StatusChip label="Unanswered found" value={latestRun.candidateCount} />}
               {Number.isFinite(latestRun.skippedThreadsWithCreatorReplies) && <StatusChip label="Already answered" value={latestRun.skippedThreadsWithCreatorReplies} />}
-              {Number.isFinite(latestRun.processedSkippedCount) && <StatusChip label="Seen in TapFix" value={latestRun.processedSkippedCount} />}
+              {Number.isFinite(latestRun.processedSkippedCount) && <StatusChip label="Already processed" value={latestRun.processedSkippedCount} />}
               <StatusChip label="More pages" value={nextPageToken ? "Yes" : "No"} tone={nextPageToken ? "amber" : "green"} />
             </div>
           )}

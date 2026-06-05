@@ -10,7 +10,7 @@ import {
   latestBatchRunFromDb,
   getConnectedUser,
   getConnectedYouTubeCredentials,
-  listKnownCommentIds,
+  listProcessedCommentIds,
   listBatchRunsFromDb,
   listLogsFromDb,
   markCommentProcessed,
@@ -665,7 +665,7 @@ async function rememberProcessedComment({ commentId, videoId, action, status, re
 }
 
 async function filterUnprocessedComments(comments) {
-  const dbKnownIds = await listKnownCommentIds();
+  const dbKnownIds = await listProcessedCommentIds();
   const knownIds = new Set(processedCommentIds);
   for (const id of dbKnownIds || []) {
     knownIds.add(id);
@@ -1317,7 +1317,7 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults, 
 
 async function findNewUnansweredYouTubeComments({ accessToken, channelId, requestedLimit, pageToken: initialPageToken = "" }) {
   const knownIds = new Set(processedCommentIds);
-  for (const id of await listKnownCommentIds() || []) {
+  for (const id of await listProcessedCommentIds() || []) {
     knownIds.add(id);
   }
 
