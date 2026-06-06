@@ -629,7 +629,7 @@ function Comments() {
             </button>
             <button
               className="filter-button"
-              onClick={() => fetchNewYouTubeComments({ scanLimit: 1000 })}
+              onClick={() => fetchNewYouTubeComments({ scanLimit: 5000 })}
               disabled={isFetchingYouTube || isLoading}
               type="button"
               title="Scan deeper and load only unanswered comments that TapFix has not processed"

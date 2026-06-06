@@ -73,7 +73,7 @@ const batchSchema = z.object({
 
 const youtubeDryRunSchema = z.object({
   maxResults: z.number().int().min(1).max(100).optional(),
-  scanLimit: z.number().int().min(1).max(1000).optional(),
+  scanLimit: z.number().int().min(1).max(5000).optional(),
   includeThreadsWithReplies: z.boolean().optional(),
   includeProcessed: z.boolean().optional(),
   pageToken: z.string().optional(),
@@ -407,6 +407,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
         accessToken,
         channelId: connectedUser.youtubeChannelId,
         requestedLimit,
+        scanLimit,
         pageToken: parsed.data?.pageToken,
       });
     const scannedComments = comments.items;
@@ -1467,7 +1468,7 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults, 
   };
 }
 
-async function findNewUnansweredYouTubeComments({ accessToken, channelId, requestedLimit, pageToken: initialPageToken = "" }) {
+async function findNewUnansweredYouTubeComments({ accessToken, channelId, requestedLimit, scanLimit, pageToken: initialPageToken = "" }) {
   const knownIds = new Set(processedCommentIds);
   for (const id of await listKnownCommentIds() || []) {
     knownIds.add(id);
@@ -1478,7 +1479,7 @@ async function findNewUnansweredYouTubeComments({ accessToken, channelId, reques
   const availableComments = [];
   let pageToken = initialPageToken;
   let nextPageToken = "";
-  const maxPages = 10;
+  const maxPages = Math.max(1, Math.ceil((scanLimit || requestedLimit) / 100));
 
   for (let pageIndex = 0; pageIndex < maxPages && availableComments.length < requestedLimit; pageIndex += 1) {
     const page = await fetchYouTubeCommentsPage({
