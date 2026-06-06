@@ -1537,31 +1537,73 @@ async function fetchYouTubeCommentsPage({ accessToken, channelId, maxResults, pa
     throw makeGoogleApiError({ payload, status: response.status, fallback: "YouTube comments request failed" });
   }
 
-  const items = (payload.items || [])
-    .map((item) => {
-      const topLevelComment = item.snippet?.topLevelComment;
-      const snippet = topLevelComment?.snippet;
-      const text = snippet?.textOriginal || snippet?.textDisplay || "";
-      const replies = item.replies?.comments || [];
-      const hasCreatorReply = replies.some((reply) => (
-        reply.snippet?.authorChannelId?.value === channelId
-      ));
+  const items = [];
+  for (const item of payload.items || []) {
+    const topLevelComment = item.snippet?.topLevelComment;
+    const snippet = topLevelComment?.snippet;
+    const text = snippet?.textOriginal || snippet?.textDisplay || "";
+    const replies = item.replies?.comments || [];
+    const replyCount = Number(item.snippet?.totalReplyCount || 0);
+    const hasInlineCreatorReply = replies.some((reply) => (
+      reply.snippet?.authorChannelId?.value === channelId
+    ));
+    const commentId = topLevelComment?.id || item.id;
 
-      return {
-        id: topLevelComment?.id || item.id,
-        videoId: item.snippet?.videoId || "unknown-video",
-        text,
-        authorName: snippet?.authorDisplayName || "Viewer",
-        replyCount: Number(item.snippet?.totalReplyCount || 0),
-        hasCreatorReply,
-      };
-    })
-    .filter((comment) => comment.id && comment.text);
+    if (!commentId || !text) {
+      continue;
+    }
+
+    const hasCreatorReply = hasInlineCreatorReply || (
+      replyCount > 0
+        ? await hasYouTubeCreatorReply({ accessToken, channelId, parentId: commentId })
+        : false
+    );
+
+    items.push({
+      id: commentId,
+      videoId: item.snippet?.videoId || "unknown-video",
+      text,
+      authorName: snippet?.authorDisplayName || "Viewer",
+      replyCount,
+      hasCreatorReply,
+    });
+  }
 
   return {
     items,
     nextPageToken: payload.nextPageToken || "",
   };
+}
+
+async function hasYouTubeCreatorReply({ accessToken, channelId, parentId }) {
+  let pageToken = "";
+
+  do {
+    const url = new URL("https://www.googleapis.com/youtube/v3/comments");
+    url.searchParams.set("part", "snippet");
+    url.searchParams.set("parentId", parentId);
+    url.searchParams.set("maxResults", "100");
+    url.searchParams.set("textFormat", "plainText");
+    if (pageToken) {
+      url.searchParams.set("pageToken", pageToken);
+    }
+
+    const response = await fetch(url, {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw makeGoogleApiError({ payload, status: response.status, fallback: "YouTube replies request failed" });
+    }
+
+    if ((payload.items || []).some((reply) => reply.snippet?.authorChannelId?.value === channelId)) {
+      return true;
+    }
+
+    pageToken = payload.nextPageToken || "";
+  } while (pageToken);
+
+  return false;
 }
 
 async function publishYouTubeReply({ accessToken, commentId, text }) {

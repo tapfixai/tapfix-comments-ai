@@ -824,7 +824,8 @@ function Comments() {
             const isWorking = currentStatus === "working";
             const replyValue = editedReplies[item.id] ?? item.reply ?? "";
             const selected = selectedIds.includes(item.id);
-            const canEditReply = item.action === "reply" || currentStatus === "published";
+            const alreadyAnswered = isAlreadyAnswered(item);
+            const canEditReply = !alreadyAnswered && isPending(item) && item.action === "reply";
 
             return (
               <article className="reply-review-card" key={item.id}>
@@ -859,7 +860,7 @@ function Comments() {
                 </div>
                 <div className="reply-card-editor">
                   <div className="reply-label-row">
-                    <span>{canEditReply ? "Generated reply" : "Recommended action"}</span>
+                    <span>{canEditReply ? "Generated reply" : alreadyAnswered ? "Existing creator reply" : "Recommended action"}</span>
                     {canEditReply && <span>{replyValue.length}/120</span>}
                   </div>
                   {canEditReply ? (
@@ -876,6 +877,11 @@ function Comments() {
                         <span>{item.replySource === "openai" ? "GPT" : item.replySource || "draft"}</span>
                       </div>
                     </>
+                  ) : alreadyAnswered ? (
+                    <div className="delete-decision">
+                      <strong>ALREADY ANSWERED</strong>
+                      <span>TapFix will show this Studio thread, but will not generate, publish, or delete anything for it.</span>
+                    </div>
                   ) : (
                     <div className="delete-decision">
                       <strong>{item.action === "delete" ? "DELETE" : "REVIEW"}</strong>
@@ -915,7 +921,7 @@ function Comments() {
                         </button>
                       </>
                     )}
-                    {item.action === "delete" && (
+                    {item.action === "delete" && !alreadyAnswered && (
                       <button
                         className="mini-action delete"
                         onClick={() => runManualAction(item, "delete")}
@@ -925,7 +931,7 @@ function Comments() {
                         Delete
                       </button>
                     )}
-                    {item.action !== "delete" && canDeleteComment(item) && (
+                    {item.action !== "delete" && !alreadyAnswered && canDeleteComment(item) && (
                       <button
                         className="mini-action delete"
                         onClick={() => runManualAction(item, "delete")}
@@ -935,7 +941,7 @@ function Comments() {
                         Delete comment
                       </button>
                     )}
-                    {item.action === "review" && (
+                    {item.action === "review" && !alreadyAnswered && (
                       <button
                         className="mini-action secondary"
                         onClick={() => regenerateReply(item)}
@@ -946,14 +952,16 @@ function Comments() {
                         Generate reply
                       </button>
                     )}
-                    <button
-                      className="mini-action"
-                      onClick={() => runManualAction(item, "skip")}
-                      disabled={!isPending(item) || isWorking}
-                      type="button"
-                    >
-                      Skip
-                    </button>
+                    {!alreadyAnswered && (
+                      <button
+                        className="mini-action"
+                        onClick={() => runManualAction(item, "skip")}
+                        disabled={!isPending(item) || isWorking}
+                        type="button"
+                      >
+                        Skip
+                      </button>
+                    )}
                     {!hasYouTubeTarget(item) && isPending(item) && (
                       <span className="action-note">Test row only. Load YouTube comments to publish or delete.</span>
                     )}
@@ -985,6 +993,11 @@ function isPending(item) {
   return getItemStatus(item) === "pending";
 }
 
+function isAlreadyAnswered(item) {
+  const category = String(item?.smartCategory || item?.category || "").toLowerCase();
+  return category.includes("already_answered") || item?.replySource === "youtube";
+}
+
 function hasYouTubeTarget(item) {
   return Boolean(item?.id && item?.videoId && item.videoId !== "manual-test" && item.videoId !== "unknown-video");
 }
@@ -1006,8 +1019,7 @@ function canRunAction(item, action) {
 }
 
 function canDeleteComment(item) {
-  const status = getItemStatus(item);
-  return hasYouTubeTarget(item) && status !== "deleted" && status !== "working";
+  return hasYouTubeTarget(item) && isPending(item) && !isAlreadyAnswered(item);
 }
 
 function getBestQueueForItems(items, currentQueue) {
