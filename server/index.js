@@ -714,6 +714,38 @@ async function createDryRun(comments, meta = {}) {
   const results = [];
 
   for (const comment of comments) {
+    if (comment.hasCreatorReply) {
+      await rememberProcessedComment({
+        commentId: comment.id,
+        videoId: comment.videoId,
+        action: "reply",
+        status: "published",
+        replyText: "Already answered in YouTube Studio",
+      });
+
+      results.push({
+        id: comment.id,
+        videoId: comment.videoId,
+        videoUrl: getYouTubeVideoUrl(comment.videoId),
+        commentUrl: getYouTubeCommentUrl(comment.videoId, comment.id),
+        studioCommentsUrl: getYouTubeStudioCommentsUrl(comment.videoId),
+        comment: comment.text,
+        authorName: comment.authorName || "Viewer",
+        action: "reply",
+        status: "published",
+        processedAction: "reply",
+        category: "already_answered",
+        detectedLanguage: "Unknown",
+        replyLanguage: null,
+        languageConfidence: null,
+        reply: "Already answered in YouTube Studio",
+        smartCategory: "already_answered",
+        decisionReason: "This thread already has a creator reply in YouTube Studio, so TapFix will not publish another reply.",
+        replySource: "youtube",
+      });
+      continue;
+    }
+
     const analysis = await analyzeCommentWithAi(comment);
     const smartCategory = getSmartCategory(comment.text, analysis);
     const reply = analysis.action === "reply"
