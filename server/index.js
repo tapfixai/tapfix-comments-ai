@@ -770,6 +770,16 @@ async function createDryRun(comments, meta = {}) {
       decisionReason: getDecisionReason(comment.text, analysis, smartCategory),
       replySource: analysis.replySource,
     });
+
+    if (meta.source === "youtube") {
+      await rememberProcessedComment({
+        commentId: comment.id,
+        videoId: comment.videoId,
+        action: analysis.action,
+        status: "pending",
+        replyText: reply,
+      });
+    }
   }
 
   const run = {

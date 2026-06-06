@@ -951,7 +951,7 @@ function Comments() {
                       </button>
                     )}
                     {!hasYouTubeTarget(item) && isPending(item) && (
-                      <span className="action-note">Test row only. Load YouTube comments to publish or delete.</span>
+                      <span className="action-note">Test row only. Use Review Queue to publish or delete YouTube comments.</span>
                     )}
                   </div>
                 </div>
@@ -960,7 +960,7 @@ function Comments() {
           })}
           {!filteredItems.length && (
             <div className="empty-state">
-              {isLoading ? "Loading comments..." : "No comments in this queue. Load YouTube comments or switch tabs."}
+              {isLoading ? "Loading comments..." : "No comments in this queue. Find new unanswered comments or switch tabs."}
             </div>
           )}
         </div>
@@ -1078,7 +1078,6 @@ dm me for collab`);
   const [error, setError] = useState("");
   const [lastRunAt, setLastRunAt] = useState("");
   const [lastSource, setLastSource] = useState("Manual");
-  const [youtubeLimit, setYoutubeLimit] = useState(25);
   const [commentStatuses, setCommentStatuses] = useState({});
 
   async function runBatch() {
@@ -1142,31 +1141,6 @@ dm me for collab`);
       window.localStorage.setItem("tapfix:lastBatchRun", JSON.stringify(payload));
     } catch (loadError) {
       setError(loadError.message);
-    } finally {
-      setIsRunning(false);
-    }
-  }
-
-  async function runYouTubeDryRun() {
-    setIsRunning(true);
-    setError("");
-    try {
-      const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ maxResults: youtubeLimit, scanLimit: youtubeLimit }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.message || payload.error || "YouTube comment load failed");
-      }
-      setResults(payload.results || []);
-      setCommentStatuses({});
-      setLastRunAt(payload.createdAt || "");
-      setLastSource("YouTube");
-      window.localStorage.setItem("tapfix:lastBatchRun", JSON.stringify(payload));
-    } catch (youtubeError) {
-      setError(formatApiError(youtubeError.message));
     } finally {
       setIsRunning(false);
     }
@@ -1247,18 +1221,6 @@ dm me for collab`);
             <button className="filter-button" onClick={loadLatestRun} disabled={isRunning} type="button">
               Load latest
             </button>
-            <button className="filter-button" onClick={runYouTubeDryRun} disabled={isRunning} type="button">
-              <Video size={18} />
-              Load YouTube comments
-            </button>
-            <label className="inline-select">
-              <span>Latest</span>
-              <select value={youtubeLimit} onChange={(event) => setYoutubeLimit(Number(event.target.value))}>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </label>
             {error && <span className="error-text">{error}</span>}
           </div>
         </Panel>
@@ -1353,7 +1315,7 @@ dm me for collab`);
                           Skip
                         </button>
                         {!isYouTubeRun && !isDone && (
-                          <span className="action-note">Preview only. Load YouTube comments to publish or delete.</span>
+                          <span className="action-note">Preview only. Use Review Queue to publish or delete YouTube comments.</span>
                         )}
                       </div>
                     </td>
