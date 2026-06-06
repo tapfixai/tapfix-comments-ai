@@ -308,10 +308,11 @@ server.post("/api/comments/regenerate-reply", async (request, reply) => {
     if (process.env.OPENAI_API_KEY) {
       const aiSafety = await classifyOpenAISafety(comment, analysis);
       if (aiSafety.action === "delete") {
+        addLog("regenerate_delete", `${comment.id}: ${aiSafety.category || "openai_safety_delete"}`);
         return { reply: "DELETE", action: "delete", source: "openai_safety" };
       }
       if (aiSafety.action === "review") {
-        return { reply: "REVIEW", action: "review", source: "openai_safety" };
+        addLog("regenerate_review_continue", `${comment.id}: ${aiSafety.category || "openai_safety_review"}`);
       }
     }
 
@@ -325,6 +326,7 @@ server.post("/api/comments/regenerate-reply", async (request, reply) => {
     const cleanedReply = cleanAiReply(rawReply);
 
     if (cleanedReply === "DELETE") {
+      addLog("regenerate_delete", `${comment.id}: model_returned_delete`);
       return { reply: "DELETE", action: "delete", source: process.env.OPENAI_API_KEY ? "openai" : "rules" };
     }
 

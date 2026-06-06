@@ -482,15 +482,25 @@ function Comments() {
         throw new Error(payload.message || payload.error || "Regenerate failed");
       }
 
-      setEditedReplies((current) => ({ ...current, [item.id]: payload.reply }));
+      const nextAction = payload.action || "reply";
+      const nextReply = payload.reply || "";
+      const hasGeneratedReply = nextAction === "reply" && nextReply && nextReply !== "DELETE" && nextReply !== "REVIEW";
+
+      setEditedReplies((current) => (
+        hasGeneratedReply
+          ? { ...current, [item.id]: nextReply }
+          : Object.fromEntries(Object.entries(current).filter(([id]) => id !== item.id))
+      ));
       setItems((current) => current.map((candidate) => (
         candidate.id === item.id
-          ? { ...candidate, reply: payload.reply, action: payload.action || "reply", replySource: payload.source || "openai" }
+          ? { ...candidate, reply: nextReply, action: nextAction, replySource: payload.source || "openai" }
           : candidate
       )));
       setRowStatuses((current) => ({
         ...current,
-        [item.id]: { status: "draft", message: "New draft" },
+        [item.id]: hasGeneratedReply
+          ? { status: "draft", message: "New draft" }
+          : { status: nextAction, message: nextAction === "delete" ? "Still delete" : "Still review" },
       }));
     } catch (regenerateError) {
       const message = formatApiError(regenerateError.message || "Regenerate failed");
