@@ -10,7 +10,7 @@ import {
   latestBatchRunFromDb,
   getConnectedUser,
   getConnectedYouTubeCredentials,
-  listProcessedCommentIds,
+  listKnownCommentIds,
   listBatchRunsFromDb,
   listLogsFromDb,
   markCommentProcessed,
@@ -701,7 +701,7 @@ async function rememberProcessedComment({ commentId, videoId, action, status, re
 }
 
 async function filterUnprocessedComments(comments) {
-  const dbKnownIds = await listProcessedCommentIds();
+  const dbKnownIds = await listKnownCommentIds();
   const knownIds = new Set(processedCommentIds);
   for (const id of dbKnownIds || []) {
     knownIds.add(id);
@@ -770,16 +770,6 @@ async function createDryRun(comments, meta = {}) {
       decisionReason: getDecisionReason(comment.text, analysis, smartCategory),
       replySource: analysis.replySource,
     });
-
-    if (meta.source === "youtube") {
-      await rememberProcessedComment({
-        commentId: comment.id,
-        videoId: comment.videoId,
-        action: analysis.action,
-        status: "pending",
-        replyText: reply,
-      });
-    }
   }
 
   const run = {
@@ -1479,7 +1469,7 @@ async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults, 
 
 async function findNewUnansweredYouTubeComments({ accessToken, channelId, requestedLimit, pageToken: initialPageToken = "" }) {
   const knownIds = new Set(processedCommentIds);
-  for (const id of await listProcessedCommentIds() || []) {
+  for (const id of await listKnownCommentIds() || []) {
     knownIds.add(id);
   }
 
