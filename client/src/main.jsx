@@ -356,7 +356,12 @@ function Comments() {
       if (includeProcessed && payload.includeProcessed !== true) {
         setError("Backend is still updating. Railway has not picked up Review latest again yet; try again after the deploy finishes.");
       }
-      if (!includeProcessed && (payload.results || []).length === 0) {
+      const rawResults = payload.results || [];
+      const visibleResults = !includeProcessed && !includeThreadsWithReplies
+        ? rawResults.filter((item) => isPending(item) && !isAlreadyAnswered(item))
+        : rawResults;
+
+      if (!includeProcessed && visibleResults.length === 0) {
         setNextPageToken(payload.nextPageToken || "");
         setIncludeProcessedLoad(Boolean(payload.includeProcessed));
         setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
@@ -366,14 +371,15 @@ function Comments() {
         }
         setNotice(payload.nextPageToken
           ? "No new unanswered comments found in this pass. Existing queue was kept; use Find more to continue from the next YouTube page."
-          : "No new unanswered comments found. Existing queue was kept; Review saved unanswered can reload saved pending comments without spending YouTube quota.");
+          : "No new unanswered comments found. Existing queue was kept.");
         return;
       }
       setLatestRun({
         ...payload,
+        results: visibleResults,
         includeProcessedRequested: includeProcessed,
       });
-      const nextItems = useNextPage ? mergeCommentItems(items, payload.results || []) : payload.results || [];
+      const nextItems = useNextPage ? mergeCommentItems(items, visibleResults) : visibleResults;
       setItems(nextItems);
       setActiveQueue("all");
       setNextPageToken(payload.nextPageToken || "");
@@ -381,10 +387,10 @@ function Comments() {
       setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
       setScanLimitLoad(payload.scanLimit || scanLimit);
       setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
-      if (!includeProcessed && !useNextPage && (payload.results || []).length === 0) {
+      if (!includeProcessed && !useNextPage && visibleResults.length === 0) {
         setNotice(nextPageToken || payload.nextPageToken
-          ? "No new unseen comments found in this pass. TapFix may have already seen the latest unanswered comments; try Find more or Review saved unanswered."
-          : "No new unseen unanswered comments found. Review saved unanswered shows comments TapFix has already loaded but you have not processed yet.");
+          ? "No new unseen comments found in this pass. TapFix may have already seen the latest unanswered comments; try Find more."
+          : "No new unseen unanswered comments found.");
       }
       if (!useNextPage) {
         setEditedReplies({});
@@ -523,7 +529,7 @@ function Comments() {
   }
 
   useEffect(() => {
-    void loadLatestComments();
+    setNotice("Press Find new unanswered to load comments that still need action.");
   }, []);
 
   const queueTabs = [
@@ -621,21 +627,12 @@ function Comments() {
             </button>
             <button
               className="filter-button"
-              onClick={() => fetchNewYouTubeComments({ includeProcessed: true })}
+              onClick={() => fetchNewYouTubeComments({ scanLimit: 1000 })}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Review unanswered comments that are already saved in the current TapFix queue"
+              title="Scan deeper and load only unanswered comments that TapFix has not processed"
             >
-              Review saved unanswered
-            </button>
-            <button
-              className="filter-button"
-              onClick={() => fetchNewYouTubeComments({ includeProcessed: true, includeThreadsWithReplies: true, scanLimit: 1000 })}
-              disabled={isFetchingYouTube || isLoading}
-              type="button"
-              title="Load latest YouTube Studio comments, including already answered and already processed threads"
-            >
-              Load Studio comments
+              Find all unanswered
             </button>
             {nextPageToken && (
               <button
@@ -648,15 +645,6 @@ function Comments() {
                 Find more
               </button>
             )}
-            <button
-              className="filter-button"
-              onClick={loadLatestComments}
-              disabled={isLoading || isFetchingYouTube}
-              type="button"
-              title="Reload the latest saved YouTube run without spending YouTube quota"
-            >
-              {isLoading ? "Reloading" : "Reload saved"}
-            </button>
           </div>
         </div>
         <div className="queue-tabs">
