@@ -310,6 +310,9 @@ server.post("/api/comments/regenerate-reply", async (request, reply) => {
       if (aiSafety.action === "delete") {
         return { reply: "DELETE", action: "delete", source: "openai_safety" };
       }
+      if (aiSafety.action === "review") {
+        return { reply: "REVIEW", action: "review", source: "openai_safety" };
+      }
     }
 
     const rawReply = process.env.OPENAI_API_KEY
@@ -741,30 +744,28 @@ async function analyzeCommentWithAi(comment) {
   }
 
   try {
-    if (needsOpenAISafetyCheck(comment.text, analysis)) {
-      const aiSafety = await classifyOpenAISafety(comment, analysis);
-      if (aiSafety.action === "delete") {
-        addLog("ai_safety_delete", `${comment.id}: ${aiSafety.category}`);
-        return {
-          ...analysis,
-          action: "delete",
-          category: aiSafety.category,
-          replyLanguage: null,
-          reply: "DELETE",
-          replySource: "openai_safety",
-        };
-      }
-      if (aiSafety.action === "review") {
-        addLog("ai_safety_review", `${comment.id}: ${aiSafety.category}`);
-        return {
-          ...analysis,
-          action: "review",
-          category: aiSafety.category,
-          replyLanguage: null,
-          reply: "REVIEW",
-          replySource: "openai_safety",
-        };
-      }
+    const aiSafety = await classifyOpenAISafety(comment, analysis);
+    if (aiSafety.action === "delete") {
+      addLog("ai_safety_delete", `${comment.id}: ${aiSafety.category}`);
+      return {
+        ...analysis,
+        action: "delete",
+        category: aiSafety.category,
+        replyLanguage: null,
+        reply: "DELETE",
+        replySource: "openai_safety",
+      };
+    }
+    if (aiSafety.action === "review") {
+      addLog("ai_safety_review", `${comment.id}: ${aiSafety.category}`);
+      return {
+        ...analysis,
+        action: "review",
+        category: aiSafety.category,
+        replyLanguage: null,
+        reply: "REVIEW",
+        replySource: "openai_safety",
+      };
     }
 
     const aiReply = await generateOpenAIReply(comment, analysis);
@@ -816,28 +817,6 @@ async function analyzeCommentWithAi(comment) {
       replySource: "rules_fallback",
     };
   }
-}
-
-function needsOpenAISafetyCheck(commentText, analysis) {
-  const text = String(commentText || "");
-  const normalized = text.toLowerCase();
-  const category = String(analysis.category || "").toLowerCase();
-  const safeShortCategories = new Set(["positive_reaction", "emoji_reaction"]);
-  const characterCount = [...text.trim()].length;
-
-  if (safeShortCategories.has(category) && characterCount <= 80) {
-    return false;
-  }
-
-  if (Number(analysis.languageConfidence || 0) < 0.7) {
-    return true;
-  }
-
-  if (characterCount > 120) {
-    return true;
-  }
-
-  return /(sex|sexual|porno?|nude|naked|undress|underwear|thong|strings?|transparent|censor(?:ship)?|censura|fetish|feet|foot|boobs?|breast|ass|anus|anal|oral|blowjob|handjob|cum|orgasm|onlyfans|секс|порно|гол[а-я]*|прозрачн|стринг|вер[её]воч|минет|оральн|анальн|анус|жоп|сиськ|груд|трах|интим|desnud[ao]s?|culo|coño|polla|pene|buceta|bunda|pau|pica|xana|sexe|chatte|seks|ciplak|çıplak|göt|amcık|μουν|βυζ|κωλ|σεξ)/i.test(normalized);
 }
 
 async function classifyOpenAISafety(comment, analysis) {

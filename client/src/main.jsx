@@ -461,8 +461,6 @@ function Comments() {
         throw new Error(payload.message || payload.error || "Regenerate failed");
       }
 
-      const nextAction = payload.action || "reply";
-      const isGeneratedReply = nextAction === "reply" && payload.reply && payload.reply !== "DELETE" && payload.reply !== "REVIEW";
       setEditedReplies((current) => ({ ...current, [item.id]: payload.reply }));
       setItems((current) => current.map((candidate) => (
         candidate.id === item.id
@@ -471,9 +469,7 @@ function Comments() {
       )));
       setRowStatuses((current) => ({
         ...current,
-        [item.id]: isGeneratedReply
-          ? { status: "draft", message: "New draft" }
-          : { status: "failed", message: nextAction === "delete" ? "Blocked: delete" : "Needs review" },
+        [item.id]: { status: "draft", message: "New draft" },
       }));
     } catch (regenerateError) {
       const message = formatApiError(regenerateError.message || "Regenerate failed");
