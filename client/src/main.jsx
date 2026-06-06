@@ -628,6 +628,15 @@ function Comments() {
             >
               Review saved unanswered
             </button>
+            <button
+              className="filter-button"
+              onClick={() => fetchNewYouTubeComments({ includeProcessed: true, includeThreadsWithReplies: true, scanLimit: 1000 })}
+              disabled={isFetchingYouTube || isLoading}
+              type="button"
+              title="Load latest YouTube Studio comments, including already answered and already processed threads"
+            >
+              Load Studio comments
+            </button>
             {nextPageToken && (
               <button
                 className="filter-button"

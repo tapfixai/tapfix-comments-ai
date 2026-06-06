@@ -73,7 +73,7 @@ const batchSchema = z.object({
 
 const youtubeDryRunSchema = z.object({
   maxResults: z.number().int().min(1).max(100).optional(),
-  scanLimit: z.number().int().min(1).max(100).optional(),
+  scanLimit: z.number().int().min(1).max(1000).optional(),
   includeThreadsWithReplies: z.boolean().optional(),
   includeProcessed: z.boolean().optional(),
   pageToken: z.string().optional(),
