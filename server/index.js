@@ -305,6 +305,16 @@ server.post("/api/comments/regenerate-reply", async (request, reply) => {
   };
 
   try {
+    if (process.env.OPENAI_API_KEY) {
+      const aiSafety = await classifyOpenAISafety(comment, analysis);
+      if (aiSafety.action === "delete") {
+        return { reply: "DELETE", action: "delete", source: "openai_safety" };
+      }
+      if (aiSafety.action === "review") {
+        return { reply: "REVIEW", action: "review", source: "openai_safety" };
+      }
+    }
+
     const rawReply = process.env.OPENAI_API_KEY
       ? await generateOpenAIReply(comment, analysis, {
         tone: parsed.data.tone,
@@ -734,14 +744,42 @@ async function analyzeCommentWithAi(comment) {
   }
 
   try {
+    const aiSafety = await classifyOpenAISafety(comment, analysis);
+    if (aiSafety.action === "delete") {
+      addLog("ai_safety_delete", `${comment.id}: ${aiSafety.category}`);
+      return {
+        ...analysis,
+        action: "delete",
+        category: aiSafety.category,
+        replyLanguage: null,
+        reply: "DELETE",
+        replySource: "openai_safety",
+      };
+    }
+    if (aiSafety.action === "review") {
+      addLog("ai_safety_review", `${comment.id}: ${aiSafety.category}`);
+      return {
+        ...analysis,
+        action: "review",
+        category: aiSafety.category,
+        replyLanguage: null,
+        reply: "REVIEW",
+        replySource: "openai_safety",
+      };
+    }
+
     const aiReply = await generateOpenAIReply(comment, analysis);
     const cleanedReply = cleanAiReply(aiReply);
 
     if (cleanedReply === "DELETE") {
-      addLog("ai_delete_downgraded", `${comment.id}: OpenAI returned DELETE for a rules-safe reply candidate`);
+      addLog("ai_delete", `${comment.id}: OpenAI returned DELETE during reply generation`);
       return {
         ...analysis,
-        replySource: "rules_fallback",
+        action: "delete",
+        category: "ai_flagged_unsafe",
+        replyLanguage: null,
+        reply: "DELETE",
+        replySource: "openai",
       };
     }
 
@@ -779,6 +817,62 @@ async function analyzeCommentWithAi(comment) {
       replySource: "rules_fallback",
     };
   }
+}
+
+async function classifyOpenAISafety(comment, analysis) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MODEL || "gpt-5.2",
+      instructions: [
+        "You are a strict multilingual safety classifier for a YouTube ASMR comment moderation tool.",
+        "Classify the viewer comment before any reply is generated.",
+        "Return DELETE for sexual harassment, sexualized requests, explicit sexual content, porn references, fetish requests, body-part requests, requests about transparent clothing, underwear, strings, nudity, undressing, or suggestive clothing in any language.",
+        "Return DELETE for spam, channel promotion, links, hate, threats, or political bait.",
+        "Return REVIEW for ambiguous comments where the language or intent is unclear but not obviously safe.",
+        "Return REPLY only for safe praise, normal questions, harmless conversation, emoji reactions, or mild non-sexual appearance compliments.",
+        "Output exactly one line in this format: ACTION|category",
+        "ACTION must be DELETE, REVIEW, or REPLY.",
+      ].join("\n"),
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                `Viewer comment: ${comment.text}`,
+                `Rules action: ${analysis.action}`,
+                `Rules category: ${analysis.category}`,
+                `Detected language: ${analysis.detectedLanguage}`,
+              ].join("\n"),
+            },
+          ],
+        },
+      ],
+      max_output_tokens: 40,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error?.message || `openai_safety_failed_${response.status}`);
+  }
+
+  const outputText = extractOpenAIText(payload).trim();
+  const [rawAction, rawCategory] = outputText.split("|").map((part) => String(part || "").trim());
+  const action = rawAction.toLowerCase();
+  if (action === "delete") {
+    return { action: "delete", category: rawCategory || "ai_safety_delete" };
+  }
+  if (action === "review") {
+    return { action: "review", category: rawCategory || "ai_safety_review" };
+  }
+  return { action: "reply", category: rawCategory || analysis.category || "safe" };
 }
 
 async function generateOpenAIReply(comment, analysis, options = {}) {
