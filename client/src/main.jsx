@@ -362,16 +362,22 @@ function Comments() {
         : rawResults;
 
       if (!includeProcessed && visibleResults.length === 0) {
+        const shouldKeepExistingQueue = items.some(isPending);
         setNextPageToken(payload.nextPageToken || "");
         setIncludeProcessedLoad(Boolean(payload.includeProcessed));
         setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
         setScanLimitLoad(payload.scanLimit || scanLimit);
-        if (!items.length) {
-          setLatestRun({ ...payload, includeProcessedRequested: includeProcessed });
+        if (!shouldKeepExistingQueue) {
+          setItems([]);
+          setActiveQueue("needs_reply");
+          setSelectedIds([]);
+          setEditedReplies({});
+          setRowStatuses({});
+          setLatestRun({ ...payload, results: [], includeProcessedRequested: includeProcessed });
         }
         setNotice(payload.nextPageToken
-          ? "No new unanswered comments found in this pass. Existing queue was kept; use Find more to continue from the next YouTube page."
-          : "No new unanswered comments found. Existing queue was kept.");
+          ? "No new unanswered comments found in this pass. Use Find more to continue from the next YouTube page."
+          : "No new unanswered comments found.");
         return;
       }
       setLatestRun({
@@ -436,11 +442,7 @@ function Comments() {
           studioUrl: payload.studioCommentsUrl || item.studioCommentsUrl,
         },
       }));
-      setItems((current) => current.map((candidate) => (
-        candidate.id === item.id
-          ? { ...candidate, status: nextStatus, processedAction: action, reply: editedReplies[item.id] ?? candidate.reply }
-          : candidate
-      )));
+      setItems((current) => current.filter((candidate) => candidate.id !== item.id));
       setSelectedIds((current) => current.filter((id) => id !== item.id));
     } catch (manualError) {
       const message = formatApiError(manualError.message || `${action} failed`);
