@@ -356,6 +356,19 @@ function Comments() {
       if (includeProcessed && payload.includeProcessed !== true) {
         setError("Backend is still updating. Railway has not picked up Review latest again yet; try again after the deploy finishes.");
       }
+      if (!includeProcessed && (payload.results || []).length === 0) {
+        setNextPageToken(payload.nextPageToken || "");
+        setIncludeProcessedLoad(Boolean(payload.includeProcessed));
+        setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
+        setScanLimitLoad(payload.scanLimit || scanLimit);
+        if (!items.length) {
+          setLatestRun({ ...payload, includeProcessedRequested: includeProcessed });
+        }
+        setNotice(payload.nextPageToken
+          ? "No new unanswered comments found in this pass. Existing queue was kept; use Find more to continue from the next YouTube page."
+          : "No new unanswered comments found. Existing queue was kept; Review saved unanswered can reload saved pending comments without spending YouTube quota.");
+        return;
+      }
       setLatestRun({
         ...payload,
         includeProcessedRequested: includeProcessed,

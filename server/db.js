@@ -270,7 +270,7 @@ export async function listBatchRunsFromDb(limit = 20) {
   }
 }
 
-export async function latestBatchRunFromDb(source = null) {
+export async function latestBatchRunFromDb(source = null, options = {}) {
   const client = await ensureDatabase();
   if (!client) {
     return null;
@@ -278,10 +278,16 @@ export async function latestBatchRunFromDb(source = null) {
 
   try {
     const params = [];
-    const sourceFilter = source ? "WHERE source = $1" : "";
+    const filters = [];
     if (source) {
       params.push(source);
+      filters.push(`source = $${params.length}`);
     }
+    if (options.minTotal != null) {
+      params.push(options.minTotal);
+      filters.push(`total >= $${params.length}`);
+    }
+    const sourceFilter = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
 
     const batchResult = await client.query(
       `

@@ -255,13 +255,13 @@ server.get("/api/comments/batch-runs/latest", async (request, reply) => {
 
   const requestedSource = request.query?.source;
   const source = requestedSource === "youtube" || requestedSource === "manual" ? requestedSource : null;
-  const dbLatest = await latestBatchRunFromDb(source);
+  const dbLatest = await latestBatchRunFromDb(source, source === "youtube" ? { minTotal: 1 } : {});
   if (dbLatest) {
     return dbLatest;
   }
 
   const latest = source
-    ? [...batchRuns].reverse().find((run) => run.source === source)
+    ? [...batchRuns].reverse().find((run) => run.source === source && (source !== "youtube" || run.total > 0))
     : batchRuns.at(-1);
   if (!latest) {
     return reply.code(404).send({ error: "no_batch_runs" });
@@ -420,6 +420,32 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
     const processedSkippedCount = includeProcessed
       ? 0
       : comments.processedSkippedCount ?? Math.max(candidateComments.length - availableComments.length, 0);
+
+    if (!includeProcessed && !includeThreadsWithReplies && reviewComments.length === 0) {
+      const emptyRun = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        total: 0,
+        replies: 0,
+        reviews: 0,
+        deletes: 0,
+        results: [],
+        source: "youtube",
+        channelId: connectedUser.youtubeChannelId,
+        channelTitle: connectedUser.youtubeChannelTitle,
+        scannedCount: scannedComments.length,
+        candidateCount: candidateComments.length,
+        skippedThreadsWithCreatorReplies: scannedComments.length - candidateComments.length,
+        processedSkippedCount,
+        scanLimit: comments.scanLimit || scanLimit,
+        includeProcessed,
+        includeThreadsWithReplies,
+        nextPageToken: comments.nextPageToken,
+        notPersisted: true,
+      };
+      addLog("youtube_empty_search", `Found 0 new YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${scannedComments.length}`);
+      return emptyRun;
+    }
 
     const run = await createDryRun(reviewComments, {
       source: "youtube",
