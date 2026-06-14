@@ -10,7 +10,7 @@ import {
   latestBatchRunFromDb,
   getConnectedUser,
   getConnectedYouTubeCredentials,
-  listKnownCommentIds,
+  listProcessedCommentIds,
   listBatchRunsFromDb,
   listLogsFromDb,
   markCommentProcessed,
@@ -59,6 +59,7 @@ const googleScopes = [
   "profile",
   "https://www.googleapis.com/auth/youtube.force-ssl",
 ];
+const youtubeModerationStatuses = ["published", "heldForReview", "likelySpam"];
 
 const commentSchema = z.object({
   id: z.string().min(1),
@@ -76,6 +77,7 @@ const youtubeDryRunSchema = z.object({
   scanLimit: z.number().int().min(1).max(5000).optional(),
   includeThreadsWithReplies: z.boolean().optional(),
   includeProcessed: z.boolean().optional(),
+  moderationStatuses: z.array(z.enum(youtubeModerationStatuses)).min(1).max(youtubeModerationStatuses.length).optional(),
   pageToken: z.string().optional(),
 }).optional();
 
@@ -398,12 +400,14 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
     const scanLimit = parsed.data?.scanLimit || requestedLimit;
     const includeThreadsWithReplies = parsed.data?.includeThreadsWithReplies === true;
     const includeProcessed = parsed.data?.includeProcessed === true;
+    const moderationStatuses = normalizeYouTubeModerationStatuses(parsed.data?.moderationStatuses);
     const comments = includeProcessed || includeThreadsWithReplies
       ? await fetchLatestYouTubeComments({
         accessToken,
         channelId: connectedUser.youtubeChannelId,
         maxResults: scanLimit,
         pageToken: parsed.data?.pageToken,
+        moderationStatuses,
       })
       : await findNewUnansweredYouTubeComments({
         accessToken,
@@ -411,6 +415,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
         requestedLimit,
         scanLimit,
         pageToken: parsed.data?.pageToken,
+        moderationStatuses,
       });
     const scannedComments = comments.items;
     const candidateComments = includeThreadsWithReplies || comments.candidateItems
@@ -443,6 +448,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
         scanLimit: comments.scanLimit || scanLimit,
         includeProcessed,
         includeThreadsWithReplies,
+        moderationStatuses,
         nextPageToken: comments.nextPageToken,
         notPersisted: true,
       };
@@ -461,6 +467,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
       scanLimit: comments.scanLimit || scanLimit,
       includeProcessed,
       includeThreadsWithReplies,
+      moderationStatuses,
       nextPageToken: comments.nextPageToken,
     });
 
@@ -704,12 +711,12 @@ async function rememberProcessedComment({ commentId, videoId, action, status, re
 }
 
 async function filterUnprocessedComments(comments) {
-  const dbKnownIds = await listKnownCommentIds();
-  const knownIds = new Set(processedCommentIds);
-  for (const id of dbKnownIds || []) {
-    knownIds.add(id);
+  const dbProcessedIds = await listProcessedCommentIds();
+  const processedIds = new Set(processedCommentIds);
+  for (const id of dbProcessedIds || []) {
+    processedIds.add(id);
   }
-  return comments.filter((comment) => comment?.id && !knownIds.has(comment.id));
+  return comments.filter((comment) => comment?.id && !processedIds.has(comment.id));
 }
 
 async function createDryRun(comments, meta = {}) {
@@ -1367,6 +1374,48 @@ function getYouTubeStudioCommentsUrl(videoId) {
   return `https://studio.youtube.com/video/${encodeURIComponent(videoId)}/comments`;
 }
 
+function normalizeYouTubeModerationStatuses(statuses) {
+  const requested = Array.isArray(statuses) && statuses.length ? statuses : youtubeModerationStatuses;
+  return youtubeModerationStatuses.filter((status) => requested.includes(status));
+}
+
+function decodeYouTubeCommentsCursor(pageToken, moderationStatuses) {
+  const cursor = Object.fromEntries(moderationStatuses.map((status) => [status, ""]));
+  if (!pageToken) {
+    return cursor;
+  }
+
+  try {
+    const parsed = JSON.parse(Buffer.from(pageToken, "base64url").toString("utf8"));
+    for (const status of moderationStatuses) {
+      cursor[status] = typeof parsed?.[status] === "string" ? parsed[status] : "";
+    }
+    cursor.__statusIndex = Number.isInteger(parsed?.__statusIndex)
+      ? Math.max(0, Math.min(parsed.__statusIndex, moderationStatuses.length))
+      : 0;
+    return cursor;
+  } catch {
+    cursor.__statusIndex = 0;
+    cursor[moderationStatuses[0] || "published"] = pageToken;
+    return cursor;
+  }
+}
+
+function encodeYouTubeCommentsCursor(cursor) {
+  const statusIndex = Number.isInteger(cursor.__statusIndex) ? cursor.__statusIndex : 0;
+  const activeCursor = Object.fromEntries(Object.entries(cursor).filter(([key, token]) => (
+    key !== "__statusIndex" && Boolean(token)
+  )));
+  if (statusIndex > 0 && statusIndex < youtubeModerationStatuses.length) {
+    activeCursor.__statusIndex = statusIndex;
+  }
+  if (!Object.keys(activeCursor).length) {
+    return "";
+  }
+
+  return Buffer.from(JSON.stringify(activeCursor), "utf8").toString("base64url");
+}
+
 function getGoogleRedirectUri(request) {
   return process.env.GOOGLE_REDIRECT_URI || `${getPublicApiUrl(request)}/auth/google/callback`;
 }
@@ -1440,72 +1489,91 @@ async function getValidYouTubeAccessToken(user) {
   return payload.access_token;
 }
 
-async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults, pageToken: initialPageToken = "" }) {
+async function fetchLatestYouTubeComments({ accessToken, channelId, maxResults, pageToken: initialPageToken = "", moderationStatuses = youtubeModerationStatuses }) {
   const comments = [];
-  let pageToken = initialPageToken;
-  let nextPageToken = "";
+  const cursor = decodeYouTubeCommentsCursor(initialPageToken, moderationStatuses);
+  const nextCursor = {};
 
-  while (comments.length < maxResults) {
-    const remaining = maxResults - comments.length;
-    const page = await fetchYouTubeCommentsPage({
-      accessToken,
-      channelId,
-      maxResults: Math.min(100, remaining),
-      pageToken,
-    });
-    const pageComments = page.items;
+  for (let statusIndex = cursor.__statusIndex || 0; statusIndex < moderationStatuses.length; statusIndex += 1) {
+    const moderationStatus = moderationStatuses[statusIndex];
+    let pageToken = cursor[moderationStatus] || "";
+    while (comments.length < maxResults) {
+      const remaining = maxResults - comments.length;
+      const page = await fetchYouTubeCommentsPage({
+        accessToken,
+        channelId,
+        maxResults: Math.min(100, remaining),
+        pageToken,
+        moderationStatus,
+      });
+      const pageComments = page.items;
 
-    comments.push(...pageComments);
-
-    nextPageToken = page.nextPageToken || "";
-    pageToken = nextPageToken;
-    if (!pageToken || !pageComments.length) {
+      comments.push(...pageComments);
+      nextCursor[moderationStatus] = page.nextPageToken || "";
+      pageToken = page.nextPageToken || "";
+      nextCursor.__statusIndex = pageToken ? statusIndex : statusIndex + 1;
+      if (!pageToken || !pageComments.length) {
+        break;
+      }
+    }
+    if (comments.length >= maxResults) {
       break;
     }
   }
 
   return {
     items: comments.slice(0, maxResults),
-    nextPageToken,
+    nextPageToken: encodeYouTubeCommentsCursor(nextCursor),
   };
 }
 
-async function findNewUnansweredYouTubeComments({ accessToken, channelId, requestedLimit, scanLimit, pageToken: initialPageToken = "" }) {
-  const knownIds = new Set(processedCommentIds);
-  for (const id of await listKnownCommentIds() || []) {
-    knownIds.add(id);
+async function findNewUnansweredYouTubeComments({ accessToken, channelId, requestedLimit, scanLimit, pageToken: initialPageToken = "", moderationStatuses = youtubeModerationStatuses }) {
+  const processedIds = new Set(processedCommentIds);
+  for (const id of await listProcessedCommentIds() || []) {
+    processedIds.add(id);
   }
 
   const scannedComments = [];
   const candidateComments = [];
   const availableComments = [];
-  let pageToken = initialPageToken;
-  let nextPageToken = "";
   const maxPages = Math.max(1, Math.ceil((scanLimit || requestedLimit) / 100));
+  const cursor = decodeYouTubeCommentsCursor(initialPageToken, moderationStatuses);
+  const nextCursor = {};
+  let pageCount = 0;
 
-  for (let pageIndex = 0; pageIndex < maxPages && availableComments.length < requestedLimit; pageIndex += 1) {
-    const page = await fetchYouTubeCommentsPage({
-      accessToken,
-      channelId,
-      maxResults: 100,
-      pageToken,
-    });
+  for (let statusIndex = cursor.__statusIndex || 0; statusIndex < moderationStatuses.length; statusIndex += 1) {
+    const moderationStatus = moderationStatuses[statusIndex];
+    let pageToken = cursor[moderationStatus] || "";
+    while (pageCount < maxPages && availableComments.length < requestedLimit) {
+      const page = await fetchYouTubeCommentsPage({
+        accessToken,
+        channelId,
+        maxResults: 100,
+        pageToken,
+        moderationStatus,
+      });
+      pageCount += 1;
 
-    scannedComments.push(...page.items);
+      scannedComments.push(...page.items);
 
-    for (const comment of page.items) {
-      if (comment.hasCreatorReply) {
-        continue;
+      for (const comment of page.items) {
+        if (comment.hasCreatorReply) {
+          continue;
+        }
+        candidateComments.push(comment);
+        if (!processedIds.has(comment.id)) {
+          availableComments.push(comment);
+        }
       }
-      candidateComments.push(comment);
-      if (!knownIds.has(comment.id)) {
-        availableComments.push(comment);
+
+      nextCursor[moderationStatus] = page.nextPageToken || "";
+      pageToken = page.nextPageToken || "";
+      nextCursor.__statusIndex = pageToken ? statusIndex : statusIndex + 1;
+      if (!pageToken || !page.items.length) {
+        break;
       }
     }
-
-    nextPageToken = page.nextPageToken || "";
-    pageToken = nextPageToken;
-    if (!pageToken || !page.items.length) {
+    if (pageCount >= maxPages || availableComments.length >= requestedLimit) {
       break;
     }
   }
@@ -1516,17 +1584,18 @@ async function findNewUnansweredYouTubeComments({ accessToken, channelId, reques
     availableItems: availableComments.slice(0, requestedLimit),
     processedSkippedCount: Math.max(candidateComments.length - availableComments.length, 0),
     scanLimit: scannedComments.length,
-    nextPageToken,
+    nextPageToken: encodeYouTubeCommentsCursor(nextCursor),
   };
 }
 
-async function fetchYouTubeCommentsPage({ accessToken, channelId, maxResults, pageToken = "" }) {
+async function fetchYouTubeCommentsPage({ accessToken, channelId, maxResults, pageToken = "", moderationStatus = "published" }) {
   const url = new URL("https://www.googleapis.com/youtube/v3/commentThreads");
   url.searchParams.set("part", "snippet,replies");
   url.searchParams.set("allThreadsRelatedToChannelId", channelId);
   url.searchParams.set("maxResults", String(Math.min(100, maxResults)));
   url.searchParams.set("order", "time");
   url.searchParams.set("textFormat", "plainText");
+  url.searchParams.set("moderationStatus", moderationStatus);
   if (pageToken) {
     url.searchParams.set("pageToken", pageToken);
   }
@@ -1569,6 +1638,7 @@ async function fetchYouTubeCommentsPage({ accessToken, channelId, maxResults, pa
       authorName: snippet?.authorDisplayName || "Viewer",
       replyCount,
       hasCreatorReply,
+      moderationStatus,
     });
   }
 
