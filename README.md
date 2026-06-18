@@ -34,25 +34,30 @@ Not included yet: real Google OAuth flow, real YouTube API calls, real OpenAI AP
 - Backend API: `https://api-comments.tapfixai.app`
 - Google OAuth callback: `https://api-comments.tapfixai.app/auth/google/callback`
 
-## Netlify Frontend
+## Cloudflare Pages Frontend
 
-Set this environment variable for the frontend site:
+Use Cloudflare Pages for the React/Vite frontend.
 
-```bash
-VITE_API_URL=https://api-comments.tapfixai.app
-```
-
-Build command:
+Build settings:
 
 ```bash
-npm run build
+Build command: npm run build
+Build output directory: dist
 ```
 
-Publish directory:
+Set this environment variable for the Pages project:
 
 ```bash
-dist
+VITE_API_URL=https://tapfix-comments-ai-production.up.railway.app
 ```
+
+SPA routing is handled by `public/_redirects`, which Cloudflare Pages copies into `dist` during the Vite build:
+
+```bash
+/* /index.html 200
+```
+
+After the first Pages deploy, attach the custom domain `comments.tapfixai.app` in Cloudflare Pages and move DNS from Netlify to Cloudflare. If you test from the temporary `*.pages.dev` URL before switching the custom domain, add that Pages URL to the Railway backend CORS origin configuration.
 
 ## Railway Backend
 
