@@ -906,6 +906,91 @@ function Comments() {
     }
   }
 
+  async function reviewSelectedHistoryAgain() {
+    const targets = filteredItems.filter((item) => selectedIds.includes(item.id) && canReopenHistoryItem(item, showingProcessedHistory));
+    if (!targets.length) {
+      setError("No skipped history comments selected");
+      return;
+    }
+
+    setIsBulkRunning(true);
+    setError("");
+    const usedReplies = items
+      .map((candidate) => editedReplies[candidate.id] ?? candidate.reply)
+      .filter(Boolean);
+
+    for (const item of targets) {
+      setRowStatuses((current) => ({
+        ...current,
+        [item.id]: { status: "working", message: "Reviewing again..." },
+      }));
+
+      try {
+        const response = await apiFetch(`${API_URL}/api/comments/regenerate-reply`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            comment: item.comment,
+            detectedLanguage: item.detectedLanguage,
+            category: "review",
+            tone,
+            voiceProfile,
+            usedReplies,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.message || payload.error || "Review again failed");
+        }
+
+        const nextAction = payload.action || "review";
+        const nextReply = payload.reply || "";
+        const hasGeneratedReply = nextAction === "reply" && nextReply && nextReply !== "DELETE" && nextReply !== "REVIEW";
+        if (hasGeneratedReply) {
+          usedReplies.push(nextReply);
+        }
+
+        setEditedReplies((current) => (
+          hasGeneratedReply
+            ? { ...current, [item.id]: nextReply }
+            : Object.fromEntries(Object.entries(current).filter(([id]) => id !== item.id))
+        ));
+        setItems((current) => current.map((candidate) => (
+          candidate.id === item.id
+            ? {
+              ...candidate,
+              action: nextAction,
+              status: "pending",
+              category: payload.category || nextAction,
+              smartCategory: payload.category || nextAction,
+              detectedLanguage: payload.detectedLanguage || candidate.detectedLanguage,
+              replyLanguage: payload.replyLanguage || candidate.replyLanguage,
+              languageConfidence: payload.languageConfidence || candidate.languageConfidence,
+              reply: nextReply,
+              replySource: payload.source || "openai",
+              decisionReason: "Reopened from skipped history and reviewed again.",
+            }
+            : candidate
+        )));
+        setRowStatuses((current) => ({
+          ...current,
+          [item.id]: hasGeneratedReply
+            ? { status: "draft", message: "New draft" }
+            : { status: nextAction, message: nextAction === "delete" ? "Delete suggested" : "Needs review" },
+        }));
+      } catch (reviewError) {
+        const message = formatApiError(reviewError.message || "Review again failed");
+        setRowStatuses((current) => ({ ...current, [item.id]: { status: "failed", message } }));
+        setError(message);
+      }
+    }
+
+    setShowingProcessedHistory(false);
+    setActiveQueue("all");
+    setIsBulkRunning(false);
+    setNotice("Selected skipped comments were reviewed again. Check Replies, Deletes, or Unclear.");
+  }
+
   async function runBulk(action) {
     const targets = filteredItems.filter((item) => (
       selectedIds.includes(item.id)
@@ -970,9 +1055,11 @@ function Comments() {
   });
   const queueCounts = Object.fromEntries(queueTabs.map((tab) => [tab.id, items.filter(tab.predicate).length]));
   const visiblePendingIds = filteredItems.filter((item) => isPending(item)).map((item) => item.id);
+  const visibleReopenIds = filteredItems.filter((item) => canReopenHistoryItem(item, showingProcessedHistory)).map((item) => item.id);
   const visibleReplyIds = filteredItems.filter((item) => canRunAction(item, "reply")).map((item) => item.id);
   const visibleReviewIds = filteredItems.filter((item) => isPending(item) && item.action === "review").map((item) => item.id);
   const visibleDeleteIds = filteredItems.filter((item) => canRunAction(item, "delete")).map((item) => item.id);
+  const selectedReopenCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canReopenHistoryItem(item, showingProcessedHistory)).length;
   const selectedReplyCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canRunAction(item, "reply")).length;
   const selectedReviewCount = filteredItems.filter((item) => selectedIds.includes(item.id) && isPending(item) && item.action === "review").length;
   const selectedDeleteCount = filteredItems.filter((item) => selectedIds.includes(item.id) && canDeleteComment(item)).length;
@@ -986,8 +1073,9 @@ function Comments() {
   const deleteQueueCount = items.filter((item) => isPending(item) && item.action === "delete").length;
 
   useEffect(() => {
-    setSelectedIds((current) => current.filter((id) => visiblePendingIds.includes(id)));
-  }, [activeQueue, query, items]);
+    const selectableIds = showingProcessedHistory ? visibleReopenIds : visiblePendingIds;
+    setSelectedIds((current) => current.filter((id) => selectableIds.includes(id)));
+  }, [activeQueue, query, items, showingProcessedHistory]);
 
   function toggleSelected(itemId) {
     setSelectedIds((current) => (
@@ -1152,6 +1240,38 @@ function Comments() {
       )}
       {error && <p className="error-text">{error}</p>}
       {notice && <p className="notice-text">{notice}</p>}
+      {showingProcessedHistory && visibleReopenIds.length > 0 && (
+        <div className={selectedIds.length > 0 ? "bulk-bar history-actions" : "bulk-bar empty history-actions"}>
+          <div className="bulk-status">
+            <strong>{selectedIds.length} selected</strong>
+            <span className="bulk-hint">Only skipped history comments can be reviewed again.</span>
+          </div>
+          <div className="bulk-controls">
+            <button
+              className="mini-action secondary"
+              onClick={() => toggleSelectionGroup(visibleReopenIds)}
+              disabled={visibleReopenIds.length === 0 || isBulkRunning}
+              type="button"
+            >
+              <CheckSquare size={14} />
+              {visibleReopenIds.length > 0 && visibleReopenIds.every((id) => selectedIds.includes(id)) ? "Clear skipped" : `Select skipped (${visibleReopenIds.length})`}
+            </button>
+            <button
+              className="mini-action publish"
+              onClick={reviewSelectedHistoryAgain}
+              disabled={selectedReopenCount === 0 || isBulkRunning}
+              type="button"
+            >
+              Review again ({selectedReopenCount})
+            </button>
+            {selectedIds.length > 0 && (
+              <button className="mini-action secondary" onClick={() => setSelectedIds([])} type="button">
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {pendingCount > 0 && (
       <div className={selectedIds.length > 0 ? "bulk-bar" : "bulk-bar empty"}>
         <div className="bulk-status">
@@ -1256,12 +1376,23 @@ function Comments() {
             const selected = selectedIds.includes(item.id);
             const alreadyAnswered = isAlreadyAnswered(item);
             const isHistoryItem = !isPending(item) || item.replySource === "history";
+            const canReopenHistory = canReopenHistoryItem(item, showingProcessedHistory);
             const canEditReply = !alreadyAnswered && isPending(item) && item.action === "reply";
 
             return (
               <article className="reply-review-card" key={item.id}>
                 <div className="reply-card-comment">
-                  {isHistoryItem ? (
+                  {canReopenHistory ? (
+                    <label className="card-select">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleSelected(item.id)}
+                        aria-label={`Reopen ${item.id}`}
+                      />
+                      Reopen
+                    </label>
+                  ) : isHistoryItem ? (
                     <span className="card-select read-only">History</span>
                   ) : (
                     <label className="card-select">
@@ -1460,6 +1591,16 @@ function canRunAction(item, action) {
 
 function canDeleteComment(item) {
   return hasYouTubeTarget(item) && isPending(item) && !isAlreadyAnswered(item);
+}
+
+function canReopenHistoryItem(item, showingProcessedHistory) {
+  return Boolean(
+    showingProcessedHistory
+    && hasYouTubeTarget(item)
+    && item?.replySource === "history"
+    && getItemStatus(item) === "skipped"
+    && item.action === "skip",
+  );
 }
 
 function getBestQueueForItems(items, currentQueue) {
