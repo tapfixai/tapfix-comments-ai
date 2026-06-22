@@ -759,6 +759,31 @@ async function buildYouTubeDiscoveryDiagnostics({ scannedComments, candidateComm
       detail: comment.action || "pending",
     })),
   ].slice(0, 12);
+  const processedItems = alreadyProcessed.slice(0, 100).map((comment) => {
+    const record = processedById.get(comment.id);
+    const status = record?.status || "skipped";
+    const action = record?.action || "skip";
+    return {
+      id: comment.id,
+      videoId: comment.videoId,
+      videoUrl: getYouTubeVideoUrl(comment.videoId),
+      commentUrl: getYouTubeCommentUrl(comment.videoId, comment.id),
+      studioCommentsUrl: getYouTubeStudioCommentsUrl(comment.videoId),
+      comment: comment.text,
+      authorName: comment.authorName || "Viewer",
+      action,
+      status,
+      processedAction: action,
+      category: status === "published" ? "already_replied" : "already_skipped",
+      detectedLanguage: "Unknown",
+      replyLanguage: null,
+      languageConfidence: null,
+      reply: record?.replyText || "",
+      smartCategory: status === "published" ? "already_replied" : "already_skipped",
+      decisionReason: `This comment is already in the service history as ${status} / ${action}.`,
+      replySource: "history",
+    };
+  });
 
   return {
     scanned: scannedComments?.length || 0,
@@ -769,6 +794,7 @@ async function buildYouTubeDiscoveryDiagnostics({ scannedComments, candidateComm
     pendingByAction,
     processedByState,
     samples,
+    processedItems,
   };
 }
 

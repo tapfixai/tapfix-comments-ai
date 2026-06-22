@@ -711,6 +711,7 @@ function Comments() {
         setError("Backend is still updating. Railway has not picked up Review latest again yet; try again after the deploy finishes.");
       }
       const rawResults = payload.results || [];
+      const historyResults = payload.discoveryDiagnostics?.processedItems || [];
       const visibleResults = !includeProcessed && !includeThreadsWithReplies
         ? rawResults.filter((item) => isPending(item) && !isAlreadyAnswered(item))
         : rawResults;
@@ -729,14 +730,17 @@ function Comments() {
           includeProcessedRequested: includeProcessed,
         });
         if (!shouldKeepExistingQueue) {
-          setItems(rawResults);
-          setActiveQueue(getBestQueueForItems(rawResults, "all"));
+          const fallbackItems = rawResults.length > 0 ? rawResults : historyResults;
+          setItems(fallbackItems);
+          setActiveQueue(getBestQueueForItems(fallbackItems, "all"));
           setSelectedIds([]);
           setEditedReplies({});
           setRowStatuses({});
         }
         setNotice(rawResults.length > 0
           ? `YouTube returned ${rawResults.length} comments, but none match the active action filters. Open All or check the diagnostics below.`
+          : historyResults.length > 0
+            ? `No new comments need action. Showing ${historyResults.length} already processed comments from this scan in the queue history.`
           : payload.nextPageToken
             ? "No new unanswered comments found in this pass. Use Find more to continue from the next YouTube page."
             : "No new unanswered comments found.");
@@ -1220,6 +1224,7 @@ function Comments() {
             const replyValue = editedReplies[item.id] ?? item.reply ?? "";
             const selected = selectedIds.includes(item.id);
             const alreadyAnswered = isAlreadyAnswered(item);
+            const isHistoryItem = !isPending(item) || item.replySource === "history";
             const canEditReply = !alreadyAnswered && isPending(item) && item.action === "reply";
 
             return (
@@ -1255,7 +1260,7 @@ function Comments() {
                 </div>
                 <div className="reply-card-editor">
                   <div className="reply-label-row">
-                    <span>{canEditReply ? "Generated reply" : alreadyAnswered ? "Existing creator reply" : "Recommended action"}</span>
+                    <span>{canEditReply ? "Generated reply" : alreadyAnswered ? "Existing creator reply" : isHistoryItem ? "History" : "Recommended action"}</span>
                     {canEditReply && <span>{replyValue.length}/120</span>}
                   </div>
                   {canEditReply ? (
@@ -1272,6 +1277,11 @@ function Comments() {
                         <span>{item.replySource === "openai" ? "GPT" : item.replySource || "draft"}</span>
                       </div>
                     </>
+                  ) : isHistoryItem ? (
+                    <div className="delete-decision">
+                      <strong>PROCESSED</strong>
+                      <span>{item.decisionReason || "This comment is already in the service history."}</span>
+                    </div>
                   ) : alreadyAnswered ? (
                     <div className="delete-decision">
                       <strong>ALREADY ANSWERED</strong>
