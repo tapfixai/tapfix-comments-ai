@@ -11,6 +11,7 @@ import {
   getConnectedUser,
   getConnectedYouTubeCredentials,
   listProcessedCommentIds,
+  listProcessedCommentRecordsByIds,
   listBatchRunsFromDb,
   listLogsFromDb,
   markCommentProcessed,
@@ -428,6 +429,11 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
     const processedSkippedCount = includeProcessed
       ? 0
       : comments.processedSkippedCount ?? Math.max(candidateComments.length - availableComments.length, 0);
+    const discoveryDiagnostics = await buildYouTubeDiscoveryDiagnostics({
+      scannedComments,
+      candidateComments,
+      availableComments,
+    });
 
     if (!includeProcessed && !includeThreadsWithReplies && reviewComments.length === 0) {
       const emptyRun = {
@@ -450,6 +456,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
         includeThreadsWithReplies,
         moderationStatuses,
         nextPageToken: comments.nextPageToken,
+        discoveryDiagnostics,
         notPersisted: true,
       };
       addLog("youtube_empty_search", `Found 0 new YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${scannedComments.length}`);
@@ -469,6 +476,7 @@ server.post("/api/youtube/comments/dry-run", async (request, reply) => {
       includeThreadsWithReplies,
       moderationStatuses,
       nextPageToken: comments.nextPageToken,
+      discoveryDiagnostics,
     });
 
     addLog("youtube_dry_run", `Analyzed ${run.total} ${includeProcessed ? "latest" : "new"} YouTube comments from ${connectedUser.youtubeChannelTitle || connectedUser.youtubeChannelId} after scanning ${scannedComments.length}`);
@@ -717,6 +725,71 @@ async function filterUnprocessedComments(comments) {
     processedIds.add(id);
   }
   return comments.filter((comment) => comment?.id && !processedIds.has(comment.id));
+}
+
+async function buildYouTubeDiscoveryDiagnostics({ scannedComments, candidateComments, availableComments }) {
+  const availableIds = new Set((availableComments || []).map((comment) => comment.id).filter(Boolean));
+  const candidateIds = new Set((candidateComments || []).map((comment) => comment.id).filter(Boolean));
+  const processedRecords = await listProcessedCommentRecordsByIds([...candidateIds]);
+  const processedById = new Map(processedRecords.map((record) => [record.commentId, record]));
+  const alreadyAnswered = (scannedComments || []).filter((comment) => comment?.hasCreatorReply);
+  const alreadyProcessed = (candidateComments || []).filter((comment) => (
+    comment?.id && processedById.has(comment.id) && !availableIds.has(comment.id)
+  ));
+  const pendingByAction = countBy((availableComments || []), (comment) => comment.action || "unanalyzed");
+  const processedByState = countBy(alreadyProcessed, (comment) => {
+    const record = processedById.get(comment.id);
+    return `${record?.status || "unknown"}:${record?.action || "unknown"}`;
+  });
+
+  const samples = [
+    ...alreadyProcessed.slice(0, 5).map((comment) => {
+      const record = processedById.get(comment.id);
+      return makeDiscoverySample(comment, {
+        reason: "already_processed",
+        detail: `${record?.status || "unknown"} / ${record?.action || "unknown"}`,
+      });
+    }),
+    ...alreadyAnswered.slice(0, 5).map((comment) => makeDiscoverySample(comment, {
+      reason: "already_has_creator_reply",
+      detail: `${comment.replyCount || 0} replies in thread`,
+    })),
+    ...(availableComments || []).slice(0, 5).map((comment) => makeDiscoverySample(comment, {
+      reason: "available_for_review",
+      detail: comment.action || "pending",
+    })),
+  ].slice(0, 12);
+
+  return {
+    scanned: scannedComments?.length || 0,
+    unansweredCandidates: candidateComments?.length || 0,
+    availableForReview: availableComments?.length || 0,
+    hiddenAlreadyAnswered: alreadyAnswered.length,
+    hiddenAlreadyProcessed: alreadyProcessed.length,
+    pendingByAction,
+    processedByState,
+    samples,
+  };
+}
+
+function makeDiscoverySample(comment, { reason, detail }) {
+  return {
+    id: comment.id,
+    videoId: comment.videoId,
+    authorName: comment.authorName || "Viewer",
+    text: truncateText(comment.text || "", 180),
+    reason,
+    detail,
+    moderationStatus: comment.moderationStatus || null,
+    replyCount: Number(comment.replyCount || 0),
+    commentUrl: getYouTubeCommentUrl(comment.videoId, comment.id),
+    studioCommentsUrl: getYouTubeStudioCommentsUrl(comment.videoId),
+  };
+}
+
+function truncateText(text, maxLength) {
+  const value = String(text || "").trim();
+  return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
 }
 
 async function createDryRun(comments, meta = {}) {

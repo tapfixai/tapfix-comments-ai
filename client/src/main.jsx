@@ -721,22 +721,32 @@ function Comments() {
         setIncludeProcessedLoad(Boolean(payload.includeProcessed));
         setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
         setScanLimitLoad(payload.scanLimit || scanLimit);
+        setLatestRun({
+          ...payload,
+          results: rawResults,
+          visibleResultsCount: 0,
+          rawResultsCount: rawResults.length,
+          includeProcessedRequested: includeProcessed,
+        });
         if (!shouldKeepExistingQueue) {
-          setItems([]);
-          setActiveQueue("needs_reply");
+          setItems(rawResults);
+          setActiveQueue(getBestQueueForItems(rawResults, "all"));
           setSelectedIds([]);
           setEditedReplies({});
           setRowStatuses({});
-          setLatestRun({ ...payload, results: [], includeProcessedRequested: includeProcessed });
         }
-        setNotice(payload.nextPageToken
-          ? "No new unanswered comments found in this pass. Use Find more to continue from the next YouTube page."
-          : "No new unanswered comments found.");
+        setNotice(rawResults.length > 0
+          ? `YouTube returned ${rawResults.length} comments, but none match the active action filters. Open All or check the diagnostics below.`
+          : payload.nextPageToken
+            ? "No new unanswered comments found in this pass. Use Find more to continue from the next YouTube page."
+            : "No new unanswered comments found.");
         return;
       }
       setLatestRun({
         ...payload,
         results: visibleResults,
+        rawResultsCount: rawResults.length,
+        visibleResultsCount: visibleResults.length,
         includeProcessedRequested: includeProcessed,
       });
       const nextItems = useNextPage ? mergeCommentItems(items, visibleResults) : visibleResults;
@@ -1058,7 +1068,7 @@ function Comments() {
           </p>
           {latestRun.source === "youtube" && (
             <p className="field-note">
-              {latestRun.includeProcessed ? "Showing saved unanswered comments." : `Showing ${latestRun.results?.length ?? 0} new unanswered comments.`} {nextPageToken ? "More comments are available." : "No more pages found."}
+              {latestRun.includeProcessed ? "Showing saved unanswered comments." : `Showing ${latestRun.visibleResultsCount ?? latestRun.results?.length ?? 0} actionable comments from ${latestRun.rawResultsCount ?? latestRun.results?.length ?? 0} returned by YouTube.`} {nextPageToken ? "More comments are available." : "No more pages found."}
             </p>
           )}
           {latestRun.source === "youtube" && (
@@ -1076,6 +1086,37 @@ function Comments() {
               {Number.isFinite(latestRun.skippedThreadsWithCreatorReplies) && <StatusChip label="Already answered" value={latestRun.skippedThreadsWithCreatorReplies} />}
               {Number.isFinite(latestRun.processedSkippedCount) && <StatusChip label="Already processed" value={latestRun.processedSkippedCount} />}
               <StatusChip label="More pages" value={nextPageToken ? "Yes" : "No"} tone={nextPageToken ? "amber" : "green"} />
+            </div>
+          )}
+          {latestRun.source === "youtube" && latestRun.discoveryDiagnostics && (
+            <div className="diagnostic-panel">
+              <div className="diagnostic-header">
+                <strong>YouTube discovery diagnostics</strong>
+                <span>Shows why comments are visible or hidden after the API scan.</span>
+              </div>
+              <div className="diagnostic-grid">
+                <StatusChip label="Scanned" value={latestRun.discoveryDiagnostics.scanned ?? 0} />
+                <StatusChip label="Unanswered" value={latestRun.discoveryDiagnostics.unansweredCandidates ?? 0} />
+                <StatusChip label="Ready" value={latestRun.discoveryDiagnostics.availableForReview ?? 0} tone="green" />
+                <StatusChip label="Has creator reply" value={latestRun.discoveryDiagnostics.hiddenAlreadyAnswered ?? 0} />
+                <StatusChip label="Processed before" value={latestRun.discoveryDiagnostics.hiddenAlreadyProcessed ?? 0} />
+              </div>
+              {latestRun.discoveryDiagnostics.samples?.length > 0 && (
+                <div className="diagnostic-samples">
+                  {latestRun.discoveryDiagnostics.samples.map((sample) => (
+                    <div className="diagnostic-sample" key={`${sample.reason}-${sample.id}`}>
+                      <span className="diagnostic-reason">{formatDiscoveryReason(sample.reason)}</span>
+                      <span>{sample.detail}</span>
+                      <strong>{sample.authorName}</strong>
+                      <p>{sample.text}</p>
+                      <div>
+                        {sample.commentUrl && <a href={sample.commentUrl} target="_blank" rel="noreferrer">Open comment</a>}
+                        {sample.studioCommentsUrl && <a href={sample.studioCommentsUrl} target="_blank" rel="noreferrer">Studio</a>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1393,6 +1434,15 @@ function getBestQueueForItems(items, currentQueue) {
 
   return ["needs_reply", "needs_delete", "unclear", "published", "deleted", "skipped", "all"]
     .find((queueId) => items.some(queuePredicates[queueId])) || currentQueue;
+}
+
+function formatDiscoveryReason(reason) {
+  const labels = {
+    already_processed: "Processed before",
+    already_has_creator_reply: "Has creator reply",
+    available_for_review: "Ready",
+  };
+  return labels[reason] || reason || "Unknown";
 }
 
 function mergeCommentItems(existingItems, incomingItems) {

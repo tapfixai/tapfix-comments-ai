@@ -453,6 +453,40 @@ export async function listProcessedCommentIds() {
   }
 }
 
+export async function listProcessedCommentRecordsByIds(commentIds = []) {
+  const client = await ensureDatabase();
+  const uniqueIds = [...new Set((commentIds || []).filter(Boolean))];
+  if (!client || uniqueIds.length === 0) {
+    return [];
+  }
+
+  try {
+    const { rows } = await client.query(
+      `
+        SELECT
+          comment_id AS "commentId",
+          video_id AS "videoId",
+          action,
+          status,
+          reply_text AS "replyText",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM processed_comments
+        WHERE comment_id = ANY($1::text[])
+      `,
+      [uniqueIds],
+    );
+    return rows.map((row) => ({
+      ...row,
+      createdAt: row.createdAt?.toISOString?.() || row.createdAt || null,
+      updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt || null,
+    }));
+  } catch (error) {
+    console.error("Failed to list processed comment records", error);
+    return [];
+  }
+}
+
 export async function listKnownCommentIds() {
   const client = await ensureDatabase();
   if (!client) {
