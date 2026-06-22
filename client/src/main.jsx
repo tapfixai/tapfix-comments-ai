@@ -661,6 +661,7 @@ function Comments() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingYouTube, setIsFetchingYouTube] = useState(false);
   const [isBulkRunning, setIsBulkRunning] = useState(false);
+  const [showingProcessedHistory, setShowingProcessedHistory] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -677,6 +678,7 @@ function Comments() {
       setLatestRun(payload);
       setItems(payload.results || []);
       setActiveQueue(getBestQueueForItems(payload.results || [], activeQueue));
+      setShowingProcessedHistory(false);
       setNextPageToken(payload.nextPageToken || "");
       setIncludeProcessedLoad(Boolean(payload.includeProcessed));
       setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
@@ -695,6 +697,7 @@ function Comments() {
     setIsFetchingYouTube(true);
     setError("");
     setNotice("");
+    setShowingProcessedHistory(false);
     try {
       const pageToken = useNextPage ? nextPageToken : "";
       const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
@@ -711,7 +714,6 @@ function Comments() {
         setError("Backend is still updating. Railway has not picked up Review latest again yet; try again after the deploy finishes.");
       }
       const rawResults = payload.results || [];
-      const historyResults = payload.discoveryDiagnostics?.processedItems || [];
       const visibleResults = !includeProcessed && !includeThreadsWithReplies
         ? rawResults.filter((item) => isPending(item) && !isAlreadyAnswered(item))
         : rawResults;
@@ -730,17 +732,17 @@ function Comments() {
           includeProcessedRequested: includeProcessed,
         });
         if (!shouldKeepExistingQueue) {
-          const fallbackItems = rawResults.length > 0 ? rawResults : historyResults;
-          setItems(fallbackItems);
-          setActiveQueue(getBestQueueForItems(fallbackItems, "all"));
+          setItems(rawResults);
+          setActiveQueue(getBestQueueForItems(rawResults, "all"));
           setSelectedIds([]);
           setEditedReplies({});
           setRowStatuses({});
         }
+        const processedCount = payload.discoveryDiagnostics?.hiddenAlreadyProcessed || 0;
         setNotice(rawResults.length > 0
           ? `YouTube returned ${rawResults.length} comments, but none match the active action filters. Open All or check the diagnostics below.`
-          : historyResults.length > 0
-            ? `No new comments need action. Showing ${historyResults.length} already processed comments from this scan in the queue history.`
+          : processedCount > 0
+            ? `No new comments need action. ${processedCount} comments from this scan were already processed; open history only if you need to audit them.`
           : payload.nextPageToken
             ? "No new unanswered comments found in this pass. Use Find more to continue from the next YouTube page."
             : "No new unanswered comments found.");
@@ -755,6 +757,7 @@ function Comments() {
       });
       const nextItems = useNextPage ? mergeCommentItems(items, visibleResults) : visibleResults;
       setItems(nextItems);
+      setShowingProcessedHistory(false);
       setActiveQueue("all");
       setNextPageToken(payload.nextPageToken || "");
       setIncludeProcessedLoad(Boolean(payload.includeProcessed));
@@ -775,6 +778,32 @@ function Comments() {
     } finally {
       setIsFetchingYouTube(false);
     }
+  }
+
+  function showProcessedHistoryFromRun() {
+    const historyItems = latestRun?.discoveryDiagnostics?.processedItems || [];
+    if (!historyItems.length) {
+      setNotice("No processed history is available for this scan.");
+      return;
+    }
+
+    setItems(historyItems);
+    setActiveQueue("all");
+    setSelectedIds([]);
+    setEditedReplies({});
+    setRowStatuses({});
+    setShowingProcessedHistory(true);
+    setNotice(`Showing ${historyItems.length} already processed comments as read-only history.`);
+  }
+
+  function clearProcessedHistoryView() {
+    setItems([]);
+    setActiveQueue("needs_reply");
+    setSelectedIds([]);
+    setEditedReplies({});
+    setRowStatuses({});
+    setShowingProcessedHistory(false);
+    setNotice("Processed history hidden. Press Find new unanswered to scan for new work.");
   }
 
   async function runManualAction(item, action) {
@@ -1095,8 +1124,8 @@ function Comments() {
           {latestRun.source === "youtube" && latestRun.discoveryDiagnostics && (
             <div className="diagnostic-panel">
               <div className="diagnostic-header">
-                <strong>YouTube discovery diagnostics</strong>
-                <span>Shows why comments are visible or hidden after the API scan.</span>
+                <strong>Scan summary</strong>
+                <span>No new tasks means these comments are either already answered by the creator or already processed here.</span>
               </div>
               <div className="diagnostic-grid">
                 <StatusChip label="Scanned" value={latestRun.discoveryDiagnostics.scanned ?? 0} />
@@ -1105,20 +1134,16 @@ function Comments() {
                 <StatusChip label="Has creator reply" value={latestRun.discoveryDiagnostics.hiddenAlreadyAnswered ?? 0} />
                 <StatusChip label="Processed before" value={latestRun.discoveryDiagnostics.hiddenAlreadyProcessed ?? 0} />
               </div>
-              {latestRun.discoveryDiagnostics.samples?.length > 0 && (
-                <div className="diagnostic-samples">
-                  {latestRun.discoveryDiagnostics.samples.map((sample) => (
-                    <div className="diagnostic-sample" key={`${sample.reason}-${sample.id}`}>
-                      <span className="diagnostic-reason">{formatDiscoveryReason(sample.reason)}</span>
-                      <span>{sample.detail}</span>
-                      <strong>{sample.authorName}</strong>
-                      <p>{sample.text}</p>
-                      <div>
-                        {sample.commentUrl && <a href={sample.commentUrl} target="_blank" rel="noreferrer">Open comment</a>}
-                        {sample.studioCommentsUrl && <a href={sample.studioCommentsUrl} target="_blank" rel="noreferrer">Studio</a>}
-                      </div>
-                    </div>
-                  ))}
+              {latestRun.discoveryDiagnostics.processedItems?.length > 0 && (
+                <div className="diagnostic-actions">
+                  <button className="filter-button" type="button" onClick={showProcessedHistoryFromRun}>
+                    Show processed history ({latestRun.discoveryDiagnostics.processedItems.length})
+                  </button>
+                  {showingProcessedHistory && (
+                    <button className="filter-button" type="button" onClick={clearProcessedHistoryView}>
+                      Hide history
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1127,6 +1152,7 @@ function Comments() {
       )}
       {error && <p className="error-text">{error}</p>}
       {notice && <p className="notice-text">{notice}</p>}
+      {pendingCount > 0 && (
       <div className={selectedIds.length > 0 ? "bulk-bar" : "bulk-bar empty"}>
         <div className="bulk-status">
           <strong>{selectedIds.length} selected</strong>
@@ -1208,11 +1234,16 @@ function Comments() {
           )}
         </div>
       </div>
+      )}
       <section className="reply-workspace panel">
         <div className="reply-workspace-head">
           <div>
-            <h2>Review queue</h2>
-            <p className="field-note">Edit generated replies, publish approved text, or delete and skip comments from one place.</p>
+            <h2>{showingProcessedHistory ? "Processed history" : "Review queue"}</h2>
+            <p className="field-note">
+              {showingProcessedHistory
+                ? "Read-only comments that were already published, skipped, deleted, or otherwise handled."
+                : "Edit generated replies, publish approved text, or delete and skip comments from one place."}
+            </p>
           </div>
           <span>{filteredItems.length} visible</span>
         </div>
@@ -1230,16 +1261,20 @@ function Comments() {
             return (
               <article className="reply-review-card" key={item.id}>
                 <div className="reply-card-comment">
-                  <label className="card-select">
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      disabled={!isPending(item)}
-                      onChange={() => toggleSelected(item.id)}
-                      aria-label={`Select ${item.id}`}
-                    />
-                    Select
-                  </label>
+                  {isHistoryItem ? (
+                    <span className="card-select read-only">History</span>
+                  ) : (
+                    <label className="card-select">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        disabled={!isPending(item)}
+                        onChange={() => toggleSelected(item.id)}
+                        aria-label={`Select ${item.id}`}
+                      />
+                      Select
+                    </label>
+                  )}
                   <strong>{item.comment}</strong>
                   <span>{item.authorName || "Viewer"}</span>
                   <div className="decision-line">
@@ -1444,15 +1479,6 @@ function getBestQueueForItems(items, currentQueue) {
 
   return ["needs_reply", "needs_delete", "unclear", "published", "deleted", "skipped", "all"]
     .find((queueId) => items.some(queuePredicates[queueId])) || currentQueue;
-}
-
-function formatDiscoveryReason(reason) {
-  const labels = {
-    already_processed: "Processed before",
-    already_has_creator_reply: "Has creator reply",
-    available_for_review: "Ready",
-  };
-  return labels[reason] || reason || "Unknown";
 }
 
 function mergeCommentItems(existingItems, incomingItems) {

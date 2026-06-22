@@ -873,6 +873,13 @@ td:nth-child(2) {
   accent-color: var(--primary);
 }
 
+.card-select.read-only {
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
 .reply-card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1180,49 +1187,10 @@ textarea {
   gap: 8px;
 }
 
-.diagnostic-samples {
-  display: grid;
-  gap: 8px;
-}
-
-.diagnostic-sample {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  gap: 6px 10px;
-  align-items: center;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-muted);
-}
-
-.diagnostic-sample p {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.diagnostic-sample div {
-  grid-column: 1 / -1;
+.diagnostic-actions {
   display: flex;
-  gap: 12px;
-}
-
-.diagnostic-sample a {
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.diagnostic-reason {
-  padding: 3px 7px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 900;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .status-chip {
