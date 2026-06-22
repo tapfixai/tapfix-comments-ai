@@ -78,7 +78,175 @@ DELETE
 Viewer comment:
 {{comment}}`;
 
+const legalPages = {
+  privacy: {
+    title: "Privacy Policy",
+    updated: "Last updated: June 22, 2026",
+    intro:
+      "This Privacy Policy explains how the comments AI service at comments.tapfixai.app collects, uses, stores, and deletes information when a YouTube channel owner connects their account.",
+    sections: [
+      {
+        title: "YouTube API Services",
+        body:
+          "The service uses YouTube API Services to help authorized YouTube channel owners review comments, identify unanswered comments, prepare draft replies, publish approved replies, and moderate comments. Use of YouTube data is also subject to the YouTube Terms of Service and Google Privacy Policy.",
+        links: [
+          { label: "YouTube Terms of Service", href: "https://www.youtube.com/t/terms" },
+          { label: "Google Privacy Policy", href: "https://policies.google.com/privacy" },
+        ],
+      },
+      {
+        title: "Information we collect",
+        items: [
+          "Google account information provided during OAuth, such as account identifier, email address, and basic profile information.",
+          "YouTube channel information needed to operate the service, such as channel ID, channel title, video IDs, comment IDs, comment text, author display names, reply status, and moderation status.",
+          "OAuth access tokens and refresh tokens required to call YouTube API Services on behalf of the authorized channel owner.",
+          "Generated draft replies, approved replies, deletion or skip decisions, queue state, settings, and operational logs needed to provide and troubleshoot the service.",
+        ],
+      },
+      {
+        title: "How we use information",
+        items: [
+          "To authenticate authorized channel owners and connect their YouTube channel.",
+          "To fetch and display relevant YouTube comments for review.",
+          "To generate draft replies only for comments selected or processed through the service workflow.",
+          "To publish approved replies, delete or reject selected comments, and keep an audit history of moderation actions.",
+          "To maintain security, prevent abuse, debug errors, and improve reliability.",
+        ],
+      },
+      {
+        title: "Sharing and processors",
+        body:
+          "We do not sell YouTube API data or user personal information. We share information only with service providers that help us operate the product, such as hosting, database, logging, and AI processing providers, and only as needed to provide the service, comply with law, or protect the service.",
+      },
+      {
+        title: "Storage, security, and retention",
+        body:
+          "We use HTTPS and reasonable technical and organizational controls to protect stored data. OAuth tokens are stored securely and used only to provide authorized YouTube features. YouTube API data is retained only as long as needed for the authorized workflow, troubleshooting, security, or legal obligations, and is refreshed or deleted when it is no longer needed.",
+      },
+      {
+        title: "Delete data or revoke access",
+        body:
+          "You can request deletion of stored data by contacting support. We will delete stored data related to your account as soon as possible and within 7 calendar days, unless retention is legally required. You can also revoke the service's access to your Google account at any time from Google's permissions page; revocation stops future access to YouTube API data.",
+        links: [
+          { label: "Google permissions page", href: "https://security.google.com/settings/security/permissions" },
+          { label: "support@tapfixai.app", href: "mailto:support@tapfixai.app" },
+        ],
+      },
+      {
+        title: "Contact",
+        body: "Questions about this Privacy Policy or data deletion requests can be sent to support@tapfixai.app.",
+      },
+    ],
+  },
+  terms: {
+    title: "Terms of Service",
+    updated: "Last updated: June 22, 2026",
+    intro:
+      "These Terms govern use of the comments AI service at comments.tapfixai.app. By using the service, you agree to these Terms.",
+    sections: [
+      {
+        title: "Service",
+        body:
+          "The service helps authorized YouTube channel owners review comments, generate draft replies, publish approved replies, and moderate selected comments from one workspace.",
+      },
+      {
+        title: "Eligibility and account authorization",
+        body:
+          "You may use the service only for YouTube channels that you own or are authorized to manage. You are responsible for maintaining the security of your Google account and for all actions taken through your authorized session.",
+      },
+      {
+        title: "YouTube and Google terms",
+        body:
+          "Because the service uses YouTube API Services, by using the service you agree to be bound by the YouTube Terms of Service. Your use of the service is also subject to the YouTube API Services Terms of Service, YouTube API Services Developer Policies, and Google Privacy Policy.",
+        links: [
+          { label: "YouTube Terms of Service", href: "https://www.youtube.com/t/terms" },
+          { label: "YouTube API Services Terms of Service", href: "https://developers.google.com/youtube/terms/api-services-terms-of-service" },
+          { label: "YouTube API Services Developer Policies", href: "https://developers.google.com/youtube/terms/developer-policies" },
+          { label: "Google Privacy Policy", href: "https://policies.google.com/privacy" },
+        ],
+      },
+      {
+        title: "Acceptable use",
+        items: [
+          "Do not use the service to spam, harass, mislead, impersonate others, violate laws, or violate YouTube policies.",
+          "Review generated replies before publishing them and make sure they are accurate, appropriate, and compliant with your channel standards.",
+          "Do not attempt to bypass YouTube API quota, security, or access restrictions.",
+          "Do not use the service for channels or data you are not authorized to access.",
+        ],
+      },
+      {
+        title: "User responsibility",
+        body:
+          "You control whether generated replies are published and whether comments are skipped, deleted, or otherwise moderated. You are responsible for the content and consequences of actions approved through the service.",
+      },
+      {
+        title: "Availability and changes",
+        body:
+          "We may update, suspend, or discontinue parts of the service as needed for security, reliability, compliance, or product improvement. The service depends on third-party platforms, including YouTube API Services, which may change independently.",
+      },
+      {
+        title: "No warranty and limitation of liability",
+        body:
+          "The service is provided as is and as available. To the maximum extent permitted by law, we disclaim warranties and are not liable for indirect, incidental, special, consequential, or punitive damages, or for lost profits, data, or goodwill.",
+      },
+      {
+        title: "Privacy and contact",
+        body:
+          "Our Privacy Policy explains how we collect, use, store, and delete information. Questions about these Terms can be sent to support@tapfixai.app.",
+        links: [
+          { label: "Privacy Policy", href: "/privacy" },
+          { label: "support@tapfixai.app", href: "mailto:support@tapfixai.app" },
+        ],
+      },
+    ],
+  },
+};
+
+function LegalPage({ page }) {
+  return (
+    <main className="legal-shell">
+      <article className="legal-card">
+        <header className="legal-header">
+          <a className="legal-home" href="/">
+            Comments AI
+          </a>
+          <p>{page.updated}</p>
+          <h1>{page.title}</h1>
+          <p>{page.intro}</p>
+        </header>
+        {page.sections.map((section) => (
+          <section className="legal-section" key={section.title}>
+            <h2>{section.title}</h2>
+            {section.body ? <p>{section.body}</p> : null}
+            {section.items ? (
+              <ul className="legal-list">
+                {section.items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
+            {section.links ? (
+              <div className="legal-links">
+                {section.links.map((link) => (
+                  <a key={link.href} href={link.href}>
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ))}
+      </article>
+    </main>
+  );
+}
+
 function App() {
+  const legalRoute = window.location.pathname.replace(/^\/+|\/+$/g, "");
+  if (legalPages[legalRoute]) {
+    return <LegalPage page={legalPages[legalRoute]} />;
+  }
+
   const [page, setPage] = useState("dashboard");
   const [autoReply, setAutoReply] = useState(true);
   const [autoDelete, setAutoDelete] = useState(true);
@@ -208,6 +376,10 @@ function App() {
             );
           })}
         </nav>
+        <div className="sidebar-links" aria-label="Legal links">
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms of Service</a>
+        </div>
         <div className="connection">
           <CheckCircle2 size={18} />
           <div>
