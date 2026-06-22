@@ -40,6 +40,7 @@ function resolveApiUrl() {
 const API_URL = resolveApiUrl();
 const YOUTUBE_WINDOW_TARGET = "tapfix_youtube";
 const MAX_STATUS_MESSAGE_LENGTH = 120;
+const PROCESSED_HISTORY_PAGE_SIZE = 25;
 
 function apiFetch(url, options = {}) {
   return fetch(url, {
@@ -662,6 +663,7 @@ function Comments() {
   const [isFetchingYouTube, setIsFetchingYouTube] = useState(false);
   const [isBulkRunning, setIsBulkRunning] = useState(false);
   const [showingProcessedHistory, setShowingProcessedHistory] = useState(false);
+  const [processedHistoryVisibleCount, setProcessedHistoryVisibleCount] = useState(PROCESSED_HISTORY_PAGE_SIZE);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -679,6 +681,7 @@ function Comments() {
       setItems(payload.results || []);
       setActiveQueue(getBestQueueForItems(payload.results || [], activeQueue));
       setShowingProcessedHistory(false);
+      setProcessedHistoryVisibleCount(PROCESSED_HISTORY_PAGE_SIZE);
       setNextPageToken(payload.nextPageToken || "");
       setIncludeProcessedLoad(Boolean(payload.includeProcessed));
       setIncludeThreadsWithRepliesLoad(Boolean(payload.includeThreadsWithReplies));
@@ -698,6 +701,7 @@ function Comments() {
     setError("");
     setNotice("");
     setShowingProcessedHistory(false);
+    setProcessedHistoryVisibleCount(PROCESSED_HISTORY_PAGE_SIZE);
     try {
       const pageToken = useNextPage ? nextPageToken : "";
       const response = await apiFetch(`${API_URL}/api/youtube/comments/dry-run`, {
@@ -758,6 +762,7 @@ function Comments() {
       const nextItems = useNextPage ? mergeCommentItems(items, visibleResults) : visibleResults;
       setItems(nextItems);
       setShowingProcessedHistory(false);
+      setProcessedHistoryVisibleCount(PROCESSED_HISTORY_PAGE_SIZE);
       setActiveQueue("all");
       setNextPageToken(payload.nextPageToken || "");
       setIncludeProcessedLoad(Boolean(payload.includeProcessed));
@@ -787,13 +792,15 @@ function Comments() {
       return;
     }
 
-    setItems(historyItems);
+    const visibleItems = historyItems.slice(0, PROCESSED_HISTORY_PAGE_SIZE);
+    setItems(visibleItems);
     setActiveQueue("all");
     setSelectedIds([]);
     setEditedReplies({});
     setRowStatuses({});
     setShowingProcessedHistory(true);
-    setNotice(`Showing ${historyItems.length} already processed comments as read-only history.`);
+    setProcessedHistoryVisibleCount(visibleItems.length);
+    setNotice(`Showing ${visibleItems.length} of ${historyItems.length} already processed comments as read-only history.`);
   }
 
   function clearProcessedHistoryView() {
@@ -803,7 +810,18 @@ function Comments() {
     setEditedReplies({});
     setRowStatuses({});
     setShowingProcessedHistory(false);
+    setProcessedHistoryVisibleCount(PROCESSED_HISTORY_PAGE_SIZE);
     setNotice("Processed history hidden. Press Find new unanswered to scan for new work.");
+  }
+
+  function loadMoreProcessedHistory() {
+    const historyItems = latestRun?.discoveryDiagnostics?.processedItems || [];
+    const nextCount = Math.min(processedHistoryVisibleCount + PROCESSED_HISTORY_PAGE_SIZE, historyItems.length);
+    const nextItems = historyItems.slice(0, nextCount);
+    setItems(nextItems);
+    setProcessedHistoryVisibleCount(nextCount);
+    setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
+    setNotice(`Showing ${nextCount} of ${historyItems.length} already processed comments as read-only history.`);
   }
 
   async function runManualAction(item, action) {
@@ -1228,9 +1246,16 @@ function Comments() {
                     Show processed history ({latestRun.discoveryDiagnostics.processedItems.length})
                   </button>
                   {showingProcessedHistory && (
-                    <button className="filter-button" type="button" onClick={clearProcessedHistoryView}>
-                      Hide history
-                    </button>
+                    <>
+                      {processedHistoryVisibleCount < latestRun.discoveryDiagnostics.processedItems.length && (
+                        <button className="filter-button" type="button" onClick={loadMoreProcessedHistory}>
+                          Load next {Math.min(PROCESSED_HISTORY_PAGE_SIZE, latestRun.discoveryDiagnostics.processedItems.length - processedHistoryVisibleCount)}
+                        </button>
+                      )}
+                      <button className="filter-button" type="button" onClick={clearProcessedHistoryView}>
+                        Hide history
+                      </button>
+                    </>
                   )}
                 </div>
               )}
@@ -1365,7 +1390,11 @@ function Comments() {
                 : "Edit generated replies, publish approved text, or delete and skip comments from one place."}
             </p>
           </div>
-          <span>{filteredItems.length} visible</span>
+          <span>
+            {showingProcessedHistory && latestRun?.discoveryDiagnostics?.processedItems?.length
+              ? `${filteredItems.length} of ${latestRun.discoveryDiagnostics.processedItems.length} visible`
+              : `${filteredItems.length} visible`}
+          </span>
         </div>
         <div className="reply-card-grid">
           {filteredItems.map((item) => {
