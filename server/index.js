@@ -823,7 +823,7 @@ async function createDryRun(comments, meta = {}) {
         languageConfidence: null,
         reply: "Already answered in YouTube Studio",
         smartCategory: "already_answered",
-        decisionReason: "This thread already has a creator reply in YouTube Studio, so TapFix will not publish another reply.",
+        decisionReason: "This thread already has a creator reply in YouTube Studio, so the service will not publish another reply.",
         replySource: "youtube",
       });
       continue;

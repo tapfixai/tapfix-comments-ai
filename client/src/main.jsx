@@ -759,7 +759,7 @@ function Comments() {
       setSelectedIds((current) => current.filter((id) => nextItems.some((item) => item.id === id)));
       if (!includeProcessed && !useNextPage && visibleResults.length === 0) {
         setNotice(nextPageToken || payload.nextPageToken
-          ? "No new unseen comments found in this pass. TapFix may have already seen the latest unanswered comments; try Find more."
+          ? "No new unseen comments found in this pass. The service may have already seen the latest unanswered comments; try Find more."
           : "No new unseen unanswered comments found.");
       }
       if (!useNextPage) {
@@ -996,7 +996,7 @@ function Comments() {
               onClick={() => fetchNewYouTubeComments()}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Find unanswered comments TapFix has not shown before"
+              title="Find unanswered comments the service has not shown before"
             >
               <RefreshCw size={16} />
               {isFetchingYouTube ? "Searching YouTube" : "Find new unanswered"}
@@ -1006,7 +1006,7 @@ function Comments() {
               onClick={() => fetchNewYouTubeComments({ scanLimit: 5000 })}
               disabled={isFetchingYouTube || isLoading}
               type="button"
-              title="Scan deeper and load only unanswered comments that TapFix has not processed"
+              title="Scan deeper and load only unanswered comments that the service has not processed"
             >
               Find all unanswered
             </button>
@@ -1275,7 +1275,7 @@ function Comments() {
                   ) : alreadyAnswered ? (
                     <div className="delete-decision">
                       <strong>ALREADY ANSWERED</strong>
-                      <span>TapFix will show this Studio thread, but will not generate, publish, or delete anything for it.</span>
+                      <span>The service will show this Studio thread, but will not generate, publish, or delete anything for it.</span>
                     </div>
                   ) : (
                     <div className="delete-decision">
