@@ -79,7 +79,8 @@ Viewer comment:
 {{comment}}`;
 
 const legalPages = {
-  privacy: {
+  en: {
+    privacy: {
     title: "Privacy Policy",
     updated: "Last updated: June 22, 2026",
     intro:
@@ -138,7 +139,7 @@ const legalPages = {
       },
     ],
   },
-  terms: {
+    terms: {
     title: "Terms of Service",
     updated: "Last updated: June 22, 2026",
     intro:
@@ -200,19 +201,200 @@ const legalPages = {
       },
     ],
   },
+  },
+  ru: {
+    privacy: {
+      title: "Политика конфиденциальности",
+      updated: "Последнее обновление: 22 июня 2026",
+      intro:
+        "Эта Политика конфиденциальности объясняет, как сервис комментариев с AI по адресу comments.tapfixai.app собирает, использует, хранит и удаляет информацию, когда владелец YouTube-канала подключает свой аккаунт.",
+      sections: [
+        {
+          title: "YouTube API Services",
+          body:
+            "Сервис использует YouTube API Services, чтобы помогать авторизованным владельцам YouTube-каналов просматривать комментарии, находить комментарии без ответа, готовить черновики ответов, публиковать одобренные ответы и модерировать комментарии. Использование данных YouTube также регулируется Условиями использования YouTube и Политикой конфиденциальности Google.",
+          links: [
+            { label: "Условия использования YouTube", href: "https://www.youtube.com/t/terms" },
+            { label: "Политика конфиденциальности Google", href: "https://policies.google.com/privacy" },
+          ],
+        },
+        {
+          title: "Какую информацию мы собираем",
+          items: [
+            "Информацию Google-аккаунта, предоставленную во время OAuth, например идентификатор аккаунта, email и базовую информацию профиля.",
+            "Информацию YouTube-канала, нужную для работы сервиса: ID канала, название канала, ID видео, ID комментариев, текст комментариев, отображаемые имена авторов, статус ответа и статус модерации.",
+            "OAuth access tokens и refresh tokens, необходимые для вызовов YouTube API Services от имени авторизованного владельца канала.",
+            "Сгенерированные черновики ответов, одобренные ответы, решения об удалении или пропуске, состояние очереди, настройки и рабочие логи, нужные для работы и диагностики сервиса.",
+          ],
+        },
+        {
+          title: "Как мы используем информацию",
+          items: [
+            "Чтобы авторизовать владельцев каналов и подключать их YouTube-канал.",
+            "Чтобы получать и показывать релевантные комментарии YouTube для проверки.",
+            "Чтобы генерировать черновики ответов только для комментариев, выбранных или обработанных через рабочий процесс сервиса.",
+            "Чтобы публиковать одобренные ответы, удалять или отклонять выбранные комментарии и вести историю действий модерации.",
+            "Чтобы поддерживать безопасность, предотвращать злоупотребления, исправлять ошибки и повышать надежность.",
+          ],
+        },
+        {
+          title: "Передача данных и поставщики",
+          body:
+            "Мы не продаем данные YouTube API и персональную информацию пользователей. Мы передаем информацию только поставщикам, которые помогают обеспечивать работу продукта, например хостингу, базе данных, логированию и AI-обработке, и только в объеме, необходимом для предоставления сервиса, соблюдения закона или защиты сервиса.",
+        },
+        {
+          title: "Хранение, безопасность и сроки",
+          body:
+            "Мы используем HTTPS и разумные технические и организационные меры для защиты сохраненных данных. OAuth-токены хранятся безопасно и используются только для предоставления авторизованных функций YouTube. Данные YouTube API хранятся только столько, сколько необходимо для авторизованного рабочего процесса, диагностики, безопасности или юридических обязательств, и обновляются или удаляются, когда больше не нужны.",
+        },
+        {
+          title: "Удаление данных или отзыв доступа",
+          body:
+            "Вы можете запросить удаление сохраненных данных, написав в поддержку. Мы удалим данные, связанные с вашим аккаунтом, как можно скорее и в течение 7 календарных дней, если хранение не требуется по закону. Вы также можете в любое время отозвать доступ сервиса к вашему Google-аккаунту на странице разрешений Google; отзыв доступа прекращает дальнейший доступ к данным YouTube API.",
+          links: [
+            { label: "Страница разрешений Google", href: "https://security.google.com/settings/security/permissions" },
+            { label: "support@tapfixai.app", href: "mailto:support@tapfixai.app" },
+          ],
+        },
+        {
+          title: "Контакты",
+          body: "Вопросы об этой Политике конфиденциальности или запросы на удаление данных можно отправлять на support@tapfixai.app.",
+        },
+      ],
+    },
+    terms: {
+      title: "Условия использования",
+      updated: "Последнее обновление: 22 июня 2026",
+      intro:
+        "Эти Условия регулируют использование сервиса комментариев с AI по адресу comments.tapfixai.app. Используя сервис, вы соглашаетесь с этими Условиями.",
+      sections: [
+        {
+          title: "Сервис",
+          body:
+            "Сервис помогает авторизованным владельцам YouTube-каналов просматривать комментарии, генерировать черновики ответов, публиковать одобренные ответы и модерировать выбранные комментарии в одном рабочем пространстве.",
+        },
+        {
+          title: "Право использования и авторизация аккаунта",
+          body:
+            "Вы можете использовать сервис только для YouTube-каналов, которыми владеете или которыми уполномочены управлять. Вы отвечаете за безопасность своего Google-аккаунта и за все действия, выполненные через вашу авторизованную сессию.",
+        },
+        {
+          title: "Условия YouTube и Google",
+          body:
+            "Поскольку сервис использует YouTube API Services, используя сервис, вы соглашаетесь соблюдать Условия использования YouTube. Использование сервиса также регулируется Условиями использования YouTube API Services, Политиками разработчиков YouTube API Services и Политикой конфиденциальности Google.",
+          links: [
+            { label: "Условия использования YouTube", href: "https://www.youtube.com/t/terms" },
+            { label: "Условия YouTube API Services", href: "https://developers.google.com/youtube/terms/api-services-terms-of-service" },
+            { label: "Политики разработчиков YouTube API Services", href: "https://developers.google.com/youtube/terms/developer-policies" },
+            { label: "Политика конфиденциальности Google", href: "https://policies.google.com/privacy" },
+          ],
+        },
+        {
+          title: "Допустимое использование",
+          items: [
+            "Не используйте сервис для спама, травли, введения в заблуждение, выдачи себя за других, нарушения законов или правил YouTube.",
+            "Проверяйте сгенерированные ответы перед публикацией и убеждайтесь, что они точные, уместные и соответствуют стандартам вашего канала.",
+            "Не пытайтесь обходить квоты YouTube API, ограничения безопасности или ограничения доступа.",
+            "Не используйте сервис для каналов или данных, к которым у вас нет разрешенного доступа.",
+          ],
+        },
+        {
+          title: "Ответственность пользователя",
+          body:
+            "Вы контролируете, будут ли опубликованы сгенерированные ответы и будут ли комментарии пропущены, удалены или модерированы иным образом. Вы отвечаете за содержание и последствия действий, одобренных через сервис.",
+        },
+        {
+          title: "Доступность и изменения",
+          body:
+            "Мы можем обновлять, приостанавливать или прекращать работу частей сервиса, если это нужно для безопасности, надежности, соблюдения требований или улучшения продукта. Сервис зависит от сторонних платформ, включая YouTube API Services, которые могут меняться независимо от нас.",
+        },
+        {
+          title: "Отсутствие гарантий и ограничение ответственности",
+          body:
+            "Сервис предоставляется как есть и по мере доступности. В максимально разрешенной законом степени мы отказываемся от гарантий и не несем ответственности за косвенный, случайный, специальный, последующий или штрафной ущерб, а также за потерю прибыли, данных или репутации.",
+        },
+        {
+          title: "Конфиденциальность и контакты",
+          body:
+            "Наша Политика конфиденциальности объясняет, как мы собираем, используем, храним и удаляем информацию. Вопросы об этих Условиях можно отправлять на support@tapfixai.app.",
+          links: [
+            { label: "Политика конфиденциальности", href: "/privacy?lang=ru" },
+            { label: "support@tapfixai.app", href: "mailto:support@tapfixai.app" },
+          ],
+        },
+      ],
+    },
+  },
 };
 
-function LegalPage({ page }) {
+const legalLanguages = [
+  { code: "en", label: "English", native: "English" },
+  { code: "ru", label: "Russian", native: "Русский" },
+  { code: "es", label: "Spanish", native: "Español" },
+  { code: "pt", label: "Portuguese", native: "Português" },
+  { code: "fr", label: "French", native: "Français" },
+  { code: "de", label: "German", native: "Deutsch" },
+  { code: "it", label: "Italian", native: "Italiano" },
+  { code: "hi", label: "Hindi", native: "हिन्दी" },
+  { code: "id", label: "Indonesian", native: "Bahasa Indonesia" },
+  { code: "ja", label: "Japanese", native: "日本語" },
+  { code: "ko", label: "Korean", native: "한국어" },
+  { code: "zh-CN", label: "Chinese", native: "中文" },
+];
+
+function getTranslateUrl(langCode) {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("lang");
+  return `https://translate.google.com/translate?sl=en&tl=${encodeURIComponent(langCode)}&u=${encodeURIComponent(url.toString())}`;
+}
+
+function LegalPage({ pageType }) {
+  const params = new URLSearchParams(window.location.search);
+  const savedLang = window.localStorage.getItem("comments-ai-legal-lang") || "en";
+  const rawLang = params.get("lang") || savedLang;
+  const requestedLang = legalPages[rawLang] ? rawLang : "en";
+  const languageCode = legalPages[requestedLang] ? requestedLang : "en";
+  const page = legalPages[languageCode][pageType];
+  const isEnglish = languageCode === "en";
+  const translationNotice = isEnglish
+    ? "English is the official version for compliance review."
+    : "Перевод предоставлен для удобства. Английская версия остается основной для проверки и юридического толкования.";
+
+  const handleLanguageChange = (event) => {
+    const nextLang = event.target.value;
+    if (legalPages[nextLang]) {
+      window.localStorage.setItem("comments-ai-legal-lang", nextLang);
+      window.location.href = `${window.location.pathname}?lang=${nextLang}`;
+      return;
+    }
+
+    window.localStorage.setItem("comments-ai-legal-lang", "en");
+    window.location.href = getTranslateUrl(nextLang);
+  };
+
   return (
     <main className="legal-shell">
       <article className="legal-card">
         <header className="legal-header">
-          <a className="legal-home" href="/">
-            Comments AI
-          </a>
+          <div className="legal-topline">
+            <a className="legal-home" href="/">
+              Comments AI
+            </a>
+            <label className="language-select">
+              <span>{isEnglish ? "Language" : "Язык"}</span>
+              <select value={requestedLang} onChange={handleLanguageChange}>
+                {legalLanguages.map((language) => (
+                  <option key={language.code} value={language.code}>
+                    {language.native}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <p>{page.updated}</p>
           <h1>{page.title}</h1>
           <p>{page.intro}</p>
+          <p className="translation-note">{translationNotice}</p>
         </header>
         {page.sections.map((section) => (
           <section className="legal-section" key={section.title}>
@@ -243,8 +425,8 @@ function LegalPage({ page }) {
 
 function App() {
   const legalRoute = window.location.pathname.replace(/^\/+|\/+$/g, "");
-  if (legalPages[legalRoute]) {
-    return <LegalPage page={legalPages[legalRoute]} />;
+  if (["privacy", "terms"].includes(legalRoute)) {
+    return <LegalPage pageType={legalRoute} />;
   }
 
   const [page, setPage] = useState("dashboard");
