@@ -1557,13 +1557,7 @@ async function findNewUnansweredYouTubeComments({ accessToken, channelId, reques
       scannedComments.push(...page.items);
 
       for (const comment of page.items) {
-        if (comment.hasCreatorReply) {
-          continue;
-        }
-        candidateComments.push(comment);
-        if (!processedIds.has(comment.id)) {
-          availableComments.push(comment);
-        }
+        addUnansweredCandidate(comment, { candidateComments, availableComments, processedIds });
       }
 
       nextCursor[moderationStatus] = page.nextPageToken || "";
@@ -1578,6 +1572,27 @@ async function findNewUnansweredYouTubeComments({ accessToken, channelId, reques
     }
   }
 
+  if (availableComments.length < requestedLimit && !initialPageToken) {
+    const recentVideoComments = await fetchRecentVideoYouTubeComments({
+      accessToken,
+      channelId,
+      maxResults: Math.max(requestedLimit, scanLimit || requestedLimit),
+      moderationStatuses,
+    });
+    const seenIds = new Set(scannedComments.map((comment) => comment.id));
+
+    for (const comment of recentVideoComments.items) {
+      if (!seenIds.has(comment.id)) {
+        scannedComments.push(comment);
+        seenIds.add(comment.id);
+      }
+      addUnansweredCandidate(comment, { candidateComments, availableComments, processedIds });
+      if (availableComments.length >= requestedLimit) {
+        break;
+      }
+    }
+  }
+
   return {
     items: scannedComments,
     candidateItems: candidateComments,
@@ -1586,6 +1601,20 @@ async function findNewUnansweredYouTubeComments({ accessToken, channelId, reques
     scanLimit: scannedComments.length,
     nextPageToken: encodeYouTubeCommentsCursor(nextCursor),
   };
+}
+
+function addUnansweredCandidate(comment, { candidateComments, availableComments, processedIds }) {
+  if (!comment?.id || comment.hasCreatorReply) {
+    return;
+  }
+
+  if (!candidateComments.some((candidate) => candidate.id === comment.id)) {
+    candidateComments.push(comment);
+  }
+
+  if (!processedIds.has(comment.id) && !availableComments.some((candidate) => candidate.id === comment.id)) {
+    availableComments.push(comment);
+  }
 }
 
 async function fetchYouTubeCommentsPage({ accessToken, channelId, maxResults, pageToken = "", moderationStatus = "published" }) {
@@ -1609,8 +1638,20 @@ async function fetchYouTubeCommentsPage({ accessToken, channelId, maxResults, pa
     throw makeGoogleApiError({ payload, status: response.status, fallback: "YouTube comments request failed" });
   }
 
+  return {
+    items: await normalizeYouTubeCommentThreadItems({
+      accessToken,
+      channelId,
+      items: payload.items || [],
+      moderationStatus,
+    }),
+    nextPageToken: payload.nextPageToken || "",
+  };
+}
+
+async function normalizeYouTubeCommentThreadItems({ accessToken, channelId, items: rawItems, moderationStatus = null }) {
   const items = [];
-  for (const item of payload.items || []) {
+  for (const item of rawItems) {
     const topLevelComment = item.snippet?.topLevelComment;
     const snippet = topLevelComment?.snippet;
     const text = snippet?.textOriginal || snippet?.textDisplay || "";
@@ -1636,14 +1677,135 @@ async function fetchYouTubeCommentsPage({ accessToken, channelId, maxResults, pa
       videoId: item.snippet?.videoId || "unknown-video",
       text,
       authorName: snippet?.authorDisplayName || "Viewer",
+      publishedAt: snippet?.publishedAt || item.snippet?.publishedAt || null,
       replyCount,
       hasCreatorReply,
-      moderationStatus,
+      moderationStatus: snippet?.moderationStatus || item.snippet?.moderationStatus || moderationStatus,
     });
   }
 
+  return items;
+}
+
+async function fetchRecentVideoYouTubeComments({ accessToken, channelId, maxResults, moderationStatuses }) {
+  const videoIds = await fetchRecentUploadVideoIds({ accessToken, channelId, maxVideos: 50 });
+  const commentsById = new Map();
+
+  for (const videoId of videoIds) {
+    if (commentsById.size >= maxResults) {
+      break;
+    }
+
+    for (const moderationStatus of moderationStatuses) {
+      if (commentsById.size >= maxResults) {
+        break;
+      }
+
+      let page;
+      try {
+        page = await fetchYouTubeCommentsPageForVideo({
+          accessToken,
+          channelId,
+          videoId,
+          maxResults: Math.min(100, maxResults - commentsById.size),
+          moderationStatus,
+        });
+      } catch (error) {
+        if (Number(error.statusCode) >= 500 || Number(error.statusCode) === 401 || Number(error.statusCode) === 403) {
+          throw error;
+        }
+        addLog("youtube_video_comment_fallback_skip", `${videoId}/${moderationStatus}: ${error.userMessage || error.message || "skipped"}`);
+        continue;
+      }
+
+      for (const comment of page.items) {
+        commentsById.set(comment.id, comment);
+      }
+    }
+  }
+
   return {
-    items,
+    items: [...commentsById.values()].sort((a, b) => (
+      new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime()
+    )),
+  };
+}
+
+async function fetchRecentUploadVideoIds({ accessToken, channelId, maxVideos }) {
+  const channelUrl = new URL("https://www.googleapis.com/youtube/v3/channels");
+  channelUrl.searchParams.set("part", "contentDetails");
+  channelUrl.searchParams.set("id", channelId);
+
+  const channelResponse = await fetch(channelUrl, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  const channelPayload = await channelResponse.json().catch(() => ({}));
+  if (!channelResponse.ok) {
+    throw makeGoogleApiError({ payload: channelPayload, status: channelResponse.status, fallback: "YouTube channel details request failed" });
+  }
+
+  const uploadsPlaylistId = channelPayload.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploadsPlaylistId) {
+    return [];
+  }
+
+  const videoIds = [];
+  let pageToken = "";
+  do {
+    const playlistUrl = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+    playlistUrl.searchParams.set("part", "contentDetails");
+    playlistUrl.searchParams.set("playlistId", uploadsPlaylistId);
+    playlistUrl.searchParams.set("maxResults", String(Math.min(50, maxVideos - videoIds.length)));
+    if (pageToken) {
+      playlistUrl.searchParams.set("pageToken", pageToken);
+    }
+
+    const playlistResponse = await fetch(playlistUrl, {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    const playlistPayload = await playlistResponse.json().catch(() => ({}));
+    if (!playlistResponse.ok) {
+      throw makeGoogleApiError({ payload: playlistPayload, status: playlistResponse.status, fallback: "YouTube uploads playlist request failed" });
+    }
+
+    for (const item of playlistPayload.items || []) {
+      const videoId = item.contentDetails?.videoId;
+      if (videoId) {
+        videoIds.push(videoId);
+      }
+    }
+
+    pageToken = playlistPayload.nextPageToken || "";
+  } while (pageToken && videoIds.length < maxVideos);
+
+  return videoIds;
+}
+
+async function fetchYouTubeCommentsPageForVideo({ accessToken, channelId, videoId, maxResults, moderationStatus = "published" }) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/commentThreads");
+  url.searchParams.set("part", "snippet,replies");
+  url.searchParams.set("videoId", videoId);
+  url.searchParams.set("maxResults", String(Math.min(100, maxResults)));
+  url.searchParams.set("order", "time");
+  url.searchParams.set("textFormat", "plainText");
+  url.searchParams.set("moderationStatus", moderationStatus);
+
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw makeGoogleApiError({ payload, status: response.status, fallback: "YouTube video comments request failed" });
+  }
+
+  return {
+    items: await normalizeYouTubeCommentThreadItems({
+      accessToken,
+      channelId,
+      items: payload.items || [],
+      moderationStatus,
+    }),
     nextPageToken: payload.nextPageToken || "",
   };
 }
