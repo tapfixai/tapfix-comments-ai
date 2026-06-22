@@ -691,7 +691,7 @@ function Comments() {
     }
   }
 
-  async function fetchNewYouTubeComments({ useNextPage = false, includeProcessed = false, includeThreadsWithReplies = false, scanLimit = Math.max(100, youtubeLimit) } = {}) {
+  async function fetchNewYouTubeComments({ useNextPage = false, includeProcessed = false, includeThreadsWithReplies = false, scanLimit = 5000 } = {}) {
     setIsFetchingYouTube(true);
     setError("");
     setNotice("");

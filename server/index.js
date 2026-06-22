@@ -1536,15 +1536,14 @@ async function findNewUnansweredYouTubeComments({ accessToken, channelId, reques
   const scannedComments = [];
   const candidateComments = [];
   const availableComments = [];
-  const maxPages = Math.max(1, Math.ceil((scanLimit || requestedLimit) / 100));
+  const effectiveScanLimit = Math.max(scanLimit || requestedLimit, requestedLimit);
   const cursor = decodeYouTubeCommentsCursor(initialPageToken, moderationStatuses);
   const nextCursor = {};
-  let pageCount = 0;
 
   for (let statusIndex = cursor.__statusIndex || 0; statusIndex < moderationStatuses.length; statusIndex += 1) {
     const moderationStatus = moderationStatuses[statusIndex];
     let pageToken = cursor[moderationStatus] || "";
-    while (pageCount < maxPages && availableComments.length < requestedLimit) {
+    while (scannedComments.length < effectiveScanLimit && availableComments.length < requestedLimit) {
       const page = await fetchYouTubeCommentsPage({
         accessToken,
         channelId,
@@ -1552,7 +1551,6 @@ async function findNewUnansweredYouTubeComments({ accessToken, channelId, reques
         pageToken,
         moderationStatus,
       });
-      pageCount += 1;
 
       scannedComments.push(...page.items);
 
@@ -1567,7 +1565,7 @@ async function findNewUnansweredYouTubeComments({ accessToken, channelId, reques
         break;
       }
     }
-    if (pageCount >= maxPages || availableComments.length >= requestedLimit) {
+    if (scannedComments.length >= effectiveScanLimit || availableComments.length >= requestedLimit) {
       break;
     }
   }
@@ -1576,7 +1574,7 @@ async function findNewUnansweredYouTubeComments({ accessToken, channelId, reques
     const recentVideoComments = await fetchRecentVideoYouTubeComments({
       accessToken,
       channelId,
-      maxResults: Math.max(requestedLimit, scanLimit || requestedLimit),
+    maxResults: Math.max(requestedLimit, scanLimit || requestedLimit),
       moderationStatuses,
     });
     const seenIds = new Set(scannedComments.map((comment) => comment.id));
