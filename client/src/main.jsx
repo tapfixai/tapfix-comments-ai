@@ -83,7 +83,7 @@ const legalPages = {
   en: {
     privacy: {
     title: "Privacy Policy",
-    updated: "Last updated: June 22, 2026",
+    updated: "Last updated: June 25, 2026",
     intro:
       "This Privacy Policy explains how the comments AI service at comments.tapfixai.app collects, uses, stores, and deletes information when a YouTube channel owner connects their account.",
     sections: [
@@ -104,6 +104,11 @@ const legalPages = {
           "OAuth access tokens and refresh tokens required to call YouTube API Services on behalf of the authorized channel owner.",
           "Generated draft replies, approved replies, deletion or skip decisions, queue state, settings, and operational logs needed to provide and troubleshoot the service.",
         ],
+      },
+      {
+        title: "Cookies, local storage, and similar technologies",
+        body:
+          "The service stores, accesses, or collects information on or from users' devices and browsers through cookies, local storage, and similar technologies. We use session cookies to keep authorized users signed in and protect the account session. We use browser local storage to remember interface preferences, such as the selected legal-page language, and recent local application state, such as the latest comment-processing run shown in the interface. These technologies are used to operate the service, maintain security, and improve reliability; we do not use them for third-party advertising.",
       },
       {
         title: "How we use information",
@@ -206,7 +211,7 @@ const legalPages = {
   ru: {
     privacy: {
       title: "Политика конфиденциальности",
-      updated: "Последнее обновление: 22 июня 2026",
+      updated: "Последнее обновление: 25 июня 2026",
       intro:
         "Эта Политика конфиденциальности объясняет, как сервис комментариев с AI по адресу comments.tapfixai.app собирает, использует, хранит и удаляет информацию, когда владелец YouTube-канала подключает свой аккаунт.",
       sections: [
@@ -227,6 +232,11 @@ const legalPages = {
             "OAuth access tokens и refresh tokens, необходимые для вызовов YouTube API Services от имени авторизованного владельца канала.",
             "Сгенерированные черновики ответов, одобренные ответы, решения об удалении или пропуске, состояние очереди, настройки и рабочие логи, нужные для работы и диагностики сервиса.",
           ],
+        },
+        {
+          title: "Cookies, local storage и похожие технологии",
+          body:
+            "Сервис хранит, получает доступ или собирает информацию на устройствах и в браузерах пользователей с помощью cookies, local storage и похожих технологий. Мы используем session cookies, чтобы авторизованный пользователь оставался в системе и чтобы защищать сессию аккаунта. Мы используем browser local storage, чтобы запоминать настройки интерфейса, например выбранный язык юридических страниц, и недавнее локальное состояние приложения, например последний запуск обработки комментариев, показанный в интерфейсе. Эти технологии используются для работы сервиса, безопасности и надежности; мы не используем их для сторонней рекламы.",
         },
         {
           title: "Как мы используем информацию",
